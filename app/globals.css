@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 174 100% 37%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 174 100% 37%;
+    --radius: 0.75rem;
+    --sidebar-width: 280px;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 174 100% 37%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 174 100% 37%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #00bfa6 0%, #ff6b6b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.story-ring {
+  background: conic-gradient(from 0deg, #00bfa6, #ff6b6b, #00bfa6);
+  padding: 3px;
+  border-radius: 50%;
+}
+
+.story-inner {
+  background: hsl(var(--background));
+  border-radius: 50%;
+  padding: 2px;
+}
+
+.nav-icon-home {
+  color: #00bfa6;
+}
+.nav-icon-profile {
+  color: #ff6b6b;
+}
+.nav-icon-trophy {
+  color: #fbbf24;
+}
+.nav-icon-bell {
+  color: #8b5cf6;
+}
+.nav-icon-message {
+  color: #06b6d4;
+}
+.nav-icon-users {
+  color: #10b981;
+}
+.nav-icon-calendar {
+  color: #f59e0b;
+}
+.nav-icon-settings {
+  color: #6b7280;
+}
+
+.sidebar-spacing {
+  margin-left: 20px;
+  margin-right: 20px;
+}
