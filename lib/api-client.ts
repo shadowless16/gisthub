@@ -1,4 +1,4 @@
-  const API_BASE_URL = process.env.NODE_ENV === "production" ? "https://your-domain.com" : ""
+const API_BASE_URL = process.env.NODE_ENV === "production" ? "https://gisthubsocial.vercel.app" : ""
 
 interface ApiResponse<T = any> {
   success: boolean
