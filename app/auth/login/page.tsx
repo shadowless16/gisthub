@@ -52,7 +52,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto">
-            <h1 className="text-3xl font-bold gradient-text">GistHub</h1>
+            <h1 className="text-3xl font-bold gradient-text">NIIT SOCIAL HUB</h1>
             <p className="text-sm text-muted-foreground mt-1">Student Social Platform</p>
           </div>
           <CardTitle className="text-2xl">Welcome Back</CardTitle>

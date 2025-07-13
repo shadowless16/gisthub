@@ -2,7 +2,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { getUserFromRequest, JWTPayload } from "@/lib/auth"
-import { type User, sanitizeUser } from "@/lib/models/User"
+import UserModel, { sanitizeUser } from "@/lib/models/User"
 import { ObjectId } from "mongodb"
 
 export async function GET(request: NextRequest) {
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
-    const usersCollection = db.collection<User>("users");
+    const usersCollection = db.collection("users");
     const user = await usersCollection.findOne({ _id: new ObjectId(userPayload.userId) });
 
     if (!user) {

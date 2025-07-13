@@ -12,45 +12,53 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = params
+    const { id } = params;
+    // Cleaned up: removed debug logs
 
     if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid post ID" }, { status: 400 })
+      return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
     }
 
-    const { db } = await connectToDatabase()
-    const postsCollection = db.collection<Post>("posts")
+    const { db } = await connectToDatabase();
+    const postsCollection = db.collection<Post>("posts");
 
-    const post = await postsCollection.findOne({ _id: new ObjectId(id) })
-
-    if (!post) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 })
+    // Use classic $addToSet/$pull logic for like/unlike
+    const currentUserObjectId = new ObjectId(currentUser.userId);
+    const filter = { _id: new ObjectId(id) };
+    // Check if the post is visible to the backend before update
+    const foundDoc = await postsCollection.findOne(filter);
+    if (!foundDoc) {
+      return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
-
-    const currentUserObjectId = new ObjectId(currentUser.userId)
-
-    // Check if user already liked the post
-    const hasLiked = post.likes.some((likeId) => likeId.equals(currentUserObjectId))
-
+    // Ensure all likeId values are ObjectId for comparison
+    const likesArray = Array.isArray(foundDoc.likes) ? foundDoc.likes.map((id: any) => new ObjectId(id)) : [];
+    const hasLiked = likesArray.some((likeId: ObjectId) => likeId.equals(currentUserObjectId));
+    let update;
     if (hasLiked) {
-      // Unlike: Remove user from likes array
-      await postsCollection.updateOne({ _id: new ObjectId(id) }, { $pull: { likes: currentUserObjectId } })
-
-      return NextResponse.json({
-        message: "Post unliked successfully",
-        isLiked: false,
-        likesCount: post.likes.length - 1,
-      })
+      update = { $pull: { likes: currentUserObjectId } };
     } else {
-      // Like: Add user to likes array
-      await postsCollection.updateOne({ _id: new ObjectId(id) }, { $addToSet: { likes: currentUserObjectId } })
-
-      return NextResponse.json({
-        message: "Post liked successfully",
-        isLiked: true,
-        likesCount: post.likes.length + 1,
-      })
+      update = { $addToSet: { likes: currentUserObjectId } };
     }
+    const updateResult = await postsCollection.findOneAndUpdate(
+      filter,
+      update,
+      { returnDocument: "after" }
+    );
+    let updatedDoc = (updateResult as any)?.value;
+    // Fallback: if update failed, re-query the post and return its state
+    if (!updatedDoc) {
+      updatedDoc = await postsCollection.findOne(filter);
+      if (!updatedDoc) {
+        return NextResponse.json({ error: "Post not found after update" }, { status: 404 });
+      }
+    }
+    const updatedLikes = Array.isArray(updatedDoc.likes) ? updatedDoc.likes.map((id: any) => new ObjectId(id)) : [];
+    const isLiked = updatedLikes.some((likeId: ObjectId) => likeId.equals(currentUserObjectId));
+    return NextResponse.json({
+      message: isLiked ? "Post liked successfully" : "Post unliked successfully",
+      isLiked,
+      likesCount: updatedLikes.length,
+    });
   } catch (error) {
     console.error("Like/unlike post error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

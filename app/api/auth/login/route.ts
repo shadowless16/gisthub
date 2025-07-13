@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { verifyPassword, generateToken } from "@/lib/auth"
-import { type User, sanitizeUser } from "@/lib/models/User"
+import UserModel from "@/lib/models/User"
+import { sanitizeUser } from "@/lib/models/User"
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase()
-    const usersCollection = db.collection<User>("users")
+    const usersCollection = db.collection("users")
 
     // Find user by email
     const user = await usersCollection.findOne({ email })

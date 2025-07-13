@@ -23,57 +23,83 @@ interface Post {
   }
 }
 
-export default function FeedPage() {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
-  const fetchPosts = async () => {
+export default function FeedPage() {
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [skip, setSkip] = useState(0);
+  const limit = 20;
+
+  const fetchPosts = async (append = false, customSkip?: number) => {
     try {
-      setLoading(true)
-      const response = await apiClient.getPosts({ includeAnonymous: true, limit: 20 })
-      setPosts(response.posts)
-      setError(null)
+      setLoading(true);
+      const response = await apiClient.getPosts({ includeAnonymous: true, limit, skip: customSkip ?? skip }) as any;
+      if (append) {
+        setPosts(prev => [...prev, ...response.posts]);
+      } else {
+        setPosts(response.posts);
+      }
+      setHasMore(response.hasMore);
+      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load posts")
+      setError(err instanceof Error ? err.message : "Failed to load posts");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchPosts()
-  }, [])
+    fetchPosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePostCreated = () => {
-    fetchPosts() // Refresh posts when a new post is created
-  }
+    setSkip(0);
+    fetchPosts(false, 0); // Refresh posts when a new post is created
+  };
 
   const handlePostUpdate = (postId: string, updates: Partial<Post>) => {
-    setPosts((prevPosts) => prevPosts.map((post) => (post._id === postId ? { ...post, ...updates } : post)))
-  }
+    setPosts((prevPosts) => prevPosts.map((post) => (post._id === postId ? { ...post, ...updates } : post)));
+  };
 
-  if (loading) {
+  const handlePostDelete = async (postId: string) => {
+    try {
+      await apiClient.deletePost(postId);
+      setPosts((prevPosts) => prevPosts.filter((post) => post._id !== postId));
+    } catch (err) {
+      setError("Failed to delete post.");
+    }
+  };
+
+  const loadMore = () => {
+    const newSkip = skip + limit;
+    setSkip(newSkip);
+    fetchPosts(true, newSkip);
+  };
+
+  if (loading && posts.length === 0) {
     return (
       <MainLayout>
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </MainLayout>
-    )
+    );
   }
 
-  if (error) {
+  if (error && posts.length === 0) {
     return (
       <MainLayout>
         <div className="text-center py-12">
           <p className="text-red-500 mb-4">{error}</p>
-          <button onClick={fetchPosts} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90">
+          <button onClick={() => fetchPosts()} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90">
             Try Again
           </button>
         </div>
       </MainLayout>
-    )
+    );
   }
 
   return (
@@ -87,12 +113,30 @@ export default function FeedPage() {
               <p className="text-muted-foreground">No posts yet. Be the first to share something!</p>
             </div>
           ) : (
-            posts.map((post) => (
-              <PostCard key={post._id} post={post} onUpdate={(updates) => handlePostUpdate(post._id, updates)} />
-            ))
+            <>
+              {posts.map((post) => (
+                <PostCard
+                  key={post._id}
+                  post={post}
+                  onUpdate={() => handlePostUpdate(post._id, {})}
+                  onDelete={handlePostDelete}
+                />
+              ))}
+              {hasMore && (
+                <div className="flex justify-center py-4">
+                  <button
+                    onClick={loadMore}
+                    className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                    disabled={loading}
+                  >
+                    {loading ? "Loading..." : "Load More"}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
     </MainLayout>
-  )
+  );
 }

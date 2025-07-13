@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
-import { useAuth } from "@/lib/hooks/use-auth.tsx"
+import { useAuth } from "@/lib/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
 
 export default function RegisterPage() {
@@ -20,6 +20,10 @@ export default function RegisterPage() {
     username: "",
     password: "",
     confirmPassword: "",
+    firstName: "",
+    lastName: "",
+    branch: "",
+    isAlumni: false,
   })
   const [isLoading, setIsLoading] = useState(false)
 
@@ -42,7 +46,15 @@ export default function RegisterPage() {
     setIsLoading(true)
 
     try {
-      await register(formData.username, formData.email, formData.password)
+      await register({
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        branch: formData.branch,
+        isAlumni: formData.isAlumni,
+      })
       toast({
         title: "Welcome to GistHub!",
         description: "Your account has been created successfully.",
@@ -72,6 +84,59 @@ export default function RegisterPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="firstName">First Name</Label>
+              <Input
+                id="firstName"
+                type="text"
+                placeholder="First Name"
+                value={formData.firstName}
+                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                required
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Last Name</Label>
+              <Input
+                id="lastName"
+                type="text"
+                placeholder="Last Name"
+                value={formData.lastName}
+                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                required
+                disabled={isLoading}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="branch">NIIT Branch</Label>
+              <select
+                id="branch"
+                value={formData.branch}
+                onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                required
+                disabled={isLoading}
+                className="w-full border rounded px-3 py-2 text-sm"
+              >
+                <option value="">Select Branch</option>
+                <option value="Ikeja">Ikeja</option>
+                <option value="Surulere">Surulere</option>
+                <option value="Ajah">Ajah</option>
+                <option value="Abeokuta">Abeokuta</option>
+                <option value="Ibadan">Ibadan</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="isAlumni"
+                type="checkbox"
+                checked={formData.isAlumni}
+                onChange={(e) => setFormData({ ...formData, isAlumni: e.target.checked })}
+                disabled={isLoading}
+              />
+              <Label htmlFor="isAlumni">I am an Alumni</Label>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input

@@ -7,18 +7,45 @@ interface User {
   _id: string
   username: string
   email: string
+  firstName?: string
+  lastName?: string
+  branch?: string
+  isAlumni?: boolean
   profilePic?: string
   bio?: string
+  socialLinks?: {
+    instagram?: string
+    x?: string
+    github?: string
+    portfolio?: string
+  }
+  interests?: string[]
+  location?: string
   followers: string[]
   following: string[]
   createdAt: string
+  lastActive?: string
+  status?: string
+  role?: string
+  preferences?: {
+    anonymousMode?: boolean
+    receiveNotifications?: boolean
+  }
 }
 
 interface AuthContextType {
   user: User | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<void>
+  register: (data: {
+    username: string
+    email: string
+    password: string
+    firstName: string
+    lastName: string
+    branch: string
+    isAlumni: boolean
+  }) => Promise<void>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
 }
@@ -31,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = async () => {
     try {
-      const response = await apiClient.getCurrentUser()
+      const response = await apiClient.getCurrentUser() as { user: User }
       setUser(response.user)
     } catch (error) {
       setUser(null)
@@ -49,8 +76,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const register = async (username: string, email: string, password: string) => {
-    const response = await apiClient.register({ username, email, password })
+  const register = async (data: {
+    username: string
+    email: string
+    password: string
+    firstName: string
+    lastName: string
+    branch: string
+    isAlumni: boolean
+  }) => {
+    const response = await apiClient.register(data)
     setUser(response.user)
   }
 

@@ -1,4 +1,9 @@
-const API_BASE_URL = process.env.NODE_ENV === "production" ? "https://gisthubsocial.vercel.app" : ""
+
+const API_BASE_URL = typeof window !== "undefined"
+  ? window.location.origin
+  : process.env.NODE_ENV === "production"
+    ? "https://gisthubsocial.vercel.app"
+    : "http://localhost:3000"
 
 interface ApiResponse<T = any> {
   success: boolean
@@ -8,6 +13,13 @@ interface ApiResponse<T = any> {
 }
 
 class ApiClient {
+  async getUserByUsername(username: string) {
+    const response = await fetch(`${API_BASE_URL}/api/users/by-username/${username}`, {
+      headers: this.getAuthHeaders(),
+      credentials: "include",
+    });
+    return this.handleResponse(response);
+  }
   async deletePost(postId: string) {
     const response = await fetch(`${API_BASE_URL}/api/posts/${postId}`, {
       method: "DELETE",
@@ -19,18 +31,32 @@ class ApiClient {
   }
 
   async updateUser(userId: string, data: { username?: string; bio?: string; profilePic?: File | null }) {
-    const formData = new FormData();
-    if (data.username) formData.append("username", data.username);
-    if (data.bio !== undefined) formData.append("bio", data.bio);
-    if (data.profilePic) formData.append("profilePic", data.profilePic);
-    const headers: HeadersInit = {};
+    let body: BodyInit;
+    let headers: HeadersInit = {};
+    let isForm = false;
+    if (data.profilePic) {
+      // Use FormData if uploading a file
+      isForm = true;
+      const formData = new FormData();
+      if (data.username) formData.append("username", data.username);
+      if (data.bio !== undefined) formData.append("bio", data.bio);
+      formData.append("profilePic", data.profilePic);
+      body = formData;
+    } else {
+      // Use JSON for simple updates
+      body = JSON.stringify({
+        ...(data.username !== undefined ? { username: data.username } : {}),
+        ...(data.bio !== undefined ? { bio: data.bio } : {})
+      });
+      headers["Content-Type"] = "application/json";
+    }
     const token = localStorage.getItem("auth-token");
     if (token) headers["Authorization"] = `Bearer ${token}`;
     headers["Accept"] = "application/json";
-    const response = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/users/${userId}` , {
       method: "PATCH",
       headers,
-      body: formData,
+      body,
       credentials: "include",
     });
     return this.handleResponse(response);
@@ -54,7 +80,15 @@ class ApiClient {
   }
 
   // Auth methods
-  async register(userData: { username: string; email: string; password: string }) {
+  async register(userData: {
+    username: string;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    branch: string;
+    isAlumni: boolean;
+  }) {
     const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -62,7 +96,7 @@ class ApiClient {
       credentials: "include",
     })
 
-    const data = await this.handleResponse(response)
+    const data = await this.handleResponse<any>(response) as any
     if (data.token) {
       localStorage.setItem("auth-token", data.token)
     }
@@ -77,7 +111,7 @@ class ApiClient {
       credentials: "include",
     })
 
-    const data = await this.handleResponse(response)
+    const data = await this.handleResponse(response) as any
     if (data.token) {
       localStorage.setItem("auth-token", data.token)
     }
@@ -223,14 +257,31 @@ class ApiClient {
     return this.handleResponse(response)
   }
 
-  async addComment({ postId, userId, content, parentId }: { postId: string, userId: string, content: string, parentId?: string }) {
-    const response = await fetch(`/api/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postId, userId, content, parentId }),
-      credentials: "include",
-    })
-    return this.handleResponse(response)
+  async addComment({ postId, userId, content, parentId, imageFile }: { postId: string, userId: string, content: string, parentId?: string, imageFile?: File }) {
+    let response: Response;
+    if (imageFile) {
+      const formData = new FormData();
+      formData.append("postId", postId);
+      formData.append("userId", userId);
+      formData.append("content", content);
+      if (parentId) formData.append("parentId", parentId);
+      formData.append("image", imageFile);
+      const token = localStorage.getItem("auth-token");
+      response = await fetch(`/api/comments`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+        credentials: "include",
+      });
+    } else {
+      response = await fetch(`/api/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId, userId, content, parentId }),
+        credentials: "include",
+      });
+    }
+    return this.handleResponse(response);
   }
 }
 

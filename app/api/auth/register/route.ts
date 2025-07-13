@@ -2,15 +2,15 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { hashPassword, generateToken } from "@/lib/auth"
 import { validateEmail, validateUsername, validatePassword } from "@/lib/utils/validation"
-import { type User, sanitizeUser } from "@/lib/models/User"
+import UserModel, { sanitizeUser } from "@/lib/models/User"
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, email, password } = await request.json()
+    const { username, email, password, firstName, lastName, branch, isAlumni } = await request.json()
 
     // Validation
-    if (!username || !email || !password) {
-      return NextResponse.json({ error: "Username, email, and password are required" }, { status: 400 })
+    if (!username || !email || !password || !firstName || !lastName || !branch) {
+      return NextResponse.json({ error: "All required fields must be filled" }, { status: 400 })
     }
 
     if (!validateEmail(email)) {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { db } = await connectToDatabase()
-    const usersCollection = db.collection<User>("users")
+    const usersCollection = db.collection("users")
 
     // Check if user already exists
     const existingUser = await usersCollection.findOne({
@@ -42,13 +42,26 @@ export async function POST(request: NextRequest) {
 
     // Hash password and create user
     const passwordHash = await hashPassword(password)
-    const newUser: User = {
+    const newUser = {
       username,
       email,
       passwordHash,
+      firstName,
+      lastName,
+      branch,
+      isAlumni: !!isAlumni,
+      profilePic: "",
+      bio: "",
+      socialLinks: {},
+      interests: [],
+      location: "",
       followers: [],
       following: [],
       createdAt: new Date(),
+      lastActive: new Date(),
+      status: "active",
+      role: isAlumni ? "alumni" : "student",
+      preferences: { anonymousMode: false, receiveNotifications: true },
     }
 
     const result = await usersCollection.insertOne(newUser)
@@ -71,9 +84,9 @@ export async function POST(request: NextRequest) {
 
     // Generate JWT token
     const token = generateToken({
-      userId: createdUser._id!.toString(),
-      username: createdUser.username,
-      email: createdUser.email,
+      userId: createdUser?._id?.toString() || "",
+      username: createdUser?.username || "",
+      email: createdUser?.email || "",
     })
 
     // Create response with cookie

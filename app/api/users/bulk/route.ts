@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { type User, sanitizeUser } from "@/lib/models/User"
+import UserModel, { sanitizeUser } from "@/lib/models/User"
 import { ObjectId } from "mongodb"
 
 export async function GET(request: NextRequest) {
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     console.log('Bulk user fetch valid ObjectIds:', objectIds);
 
     const { db } = await connectToDatabase();
-    const usersCollection = db.collection<User>("users");
+    const usersCollection = db.collection("users");
 
     const users = await usersCollection.find({ _id: { $in: objectIds } }).toArray();
     console.log('Bulk user fetch found users:', users);

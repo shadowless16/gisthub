@@ -2,57 +2,77 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { getUserFromRequest } from "@/lib/auth"
 import { type Post, sanitizePost } from "@/lib/models/Post"
-import type { User } from "@/lib/models/User"
+import UserModel from "@/lib/models/User"
 import { isSunday } from "@/lib/utils/validation"
 import { ObjectId } from "mongodb"
 
 export async function GET(request: NextRequest) {
+  const start = Date.now();
   try {
-    const { searchParams } = new URL(request.url)
-    const includeAnonymous = searchParams.get("includeAnonymous") === "true"
-    const limit = Number.parseInt(searchParams.get("limit") || "20")
-    const skip = Number.parseInt(searchParams.get("skip") || "0")
+    const { searchParams } = new URL(request.url);
+    const includeAnonymous = searchParams.get("includeAnonymous") === "true";
+    const limit = Number.parseInt(searchParams.get("limit") || "20");
+    const skip = Number.parseInt(searchParams.get("skip") || "0");
 
-    const { db } = await connectToDatabase()
-    const postsCollection = db.collection<Post>("posts")
-    const usersCollection = db.collection<User>("users")
+    const { db } = await connectToDatabase();
+    const postsCollection = db.collection("posts");
+    const usersCollection = db.collection("users");
 
     // Build query
-    const query: any = {}
-    if (!includeAnonymous) {
-      query.isAnonymous = false
+    const query = !includeAnonymous ? { isAnonymous: false } : {};
+
+    // Only fetch needed fields
+    const projection = {
+      content: 1,
+      imageURL: 1,
+      isAnonymous: 1,
+      likes: 1,
+      likesCount: 1,
+      createdAt: 1,
+      userId: 1,
+    };
+
+    // Get posts with pagination and projection
+    const t0 = Date.now();
+    const posts = await postsCollection
+      .find(query, { projection })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+    console.log(`[API LOG] postsCollection.find took ${Date.now() - t0}ms`);
+
+
+    // Get user data for non-anonymous posts (batch)
+    const t1 = Date.now();
+    const userIds = posts.filter(p => !p.isAnonymous && p.userId).map(p => p.userId);
+    const uniqueUserIds = [...new Set(userIds.map(id => id.toString()))];
+    let userMap: Record<string, any> = {};
+    if (uniqueUserIds.length > 0) {
+      const users = await usersCollection
+        .find({ _id: { $in: uniqueUserIds.map(id => new ObjectId(id)) } }, { projection: { username: 1, profilePic: 1 } })
+        .toArray();
+      userMap = Object.fromEntries(users.map(u => [u._id.toString(), { username: u.username, profilePic: u.profilePic }]));
     }
+    console.log(`[API LOG] usersCollection.find took ${Date.now() - t1}ms`);
 
-    // Get posts with pagination
-    const posts = await postsCollection.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray()
+    const postsWithUsers = posts.map(post => {
+      if (post.isAnonymous) return sanitizePost(post as any);
+      const user = userMap[post.userId?.toString?.()];
+      return sanitizePost(post as any, user);
+    });
 
-    // Get user data for non-anonymous posts
-    const postsWithUsers = await Promise.all(
-      posts.map(async (post) => {
-        if (post.isAnonymous) {
-          return sanitizePost(post)
-        }
-
-        const user = await usersCollection.findOne({ _id: post.userId })
-        return sanitizePost(
-          post,
-          user
-            ? {
-                username: user.username,
-                profilePic: user.profilePic,
-              }
-            : undefined,
-        )
-      }),
-    )
+    const duration = Date.now() - start;
+    console.log(`[API LOG] /api/posts GET took ${duration}ms, returned ${postsWithUsers.length} posts`);
 
     return NextResponse.json({
       posts: postsWithUsers,
       hasMore: posts.length === limit,
-    })
+    });
   } catch (error) {
-    console.error("Get posts error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const duration = Date.now() - start;
+    console.error(`[API ERROR] /api/posts GET failed after ${duration}ms:`, error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -101,7 +121,7 @@ export async function POST(request: NextRequest) {
     // Get user data for response (if not anonymous)
     let userData
     if (!createdPost.isAnonymous) {
-      const usersCollection = db.collection<User>("users")
+      const usersCollection = db.collection("users")
       const user = await usersCollection.findOne({ _id: createdPost.userId })
       if (user) {
         userData = {

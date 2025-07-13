@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 import { type Comment, sanitizeComment } from "@/lib/models/Comment"
-import { type User } from "@/lib/models/User"
 
 // GET /api/comments?postId=xxx
 export async function GET(request: NextRequest) {
@@ -13,7 +12,7 @@ export async function GET(request: NextRequest) {
   }
   const { db } = await connectToDatabase()
   const commentsCollection = db.collection<Comment>("comments")
-  const usersCollection = db.collection<User>("users")
+  const usersCollection = db.collection("users")
 
   // Fetch all comments for the post
   const comments = await commentsCollection.find({ postId: new ObjectId(postId) }).sort({ createdAt: 1 }).toArray()

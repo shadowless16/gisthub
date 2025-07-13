@@ -2,7 +2,6 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 import { type Story, sanitizeStory } from "@/lib/models/Story"
-import { type User } from "@/lib/models/User"
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,8 +13,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid user ID" }, { status: 400 })
     }
     const { db } = await connectToDatabase()
-    const usersCollection = db.collection<User>("users")
-    const storiesCollection = db.collection<Story>("stories")
+    const usersCollection = db.collection("users")
+    const storiesCollection = db.collection("stories")
 
     // Get the list of users this user is following
     const user = await usersCollection.findOne({ _id: new ObjectId(userId) })
@@ -36,7 +35,8 @@ export async function GET(request: NextRequest) {
         { $replaceRoot: { newRoot: "$story" } },
       ])
       .toArray()
-    return NextResponse.json({ stories: stories.map(sanitizeStory) })
+    // Cast each story to Story type before sanitizing
+    return NextResponse.json({ stories: stories.map(story => sanitizeStory(story as Story)) })
   } catch (error) {
     console.error("Error fetching following stories:", error)
     return NextResponse.json({ error: "Failed to fetch stories" }, { status: 500 })

@@ -21,14 +21,29 @@ import Picker from '@emoji-mart/react'
 import data from '@emoji-mart/data'
 
 // Custom hook for managing like functionality
-const useLike = (post, onUpdate) => {
+interface Post {
+  _id: string;
+  userId: string;
+  content: string;
+  imageURL?: string;
+  isAnonymous: boolean;
+  likes: string[];
+  likesCount: number;
+  createdAt: string;
+  user?: {
+    username: string;
+    profilePic?: string;
+  };
+}
+
+const useLike = (post: Post, onUpdate?: (id: string) => void) => {
   const { user } = useAuth()
   const { toast } = useToast()
   const [isLiked, setIsLiked] = useState(Array.isArray(post.likes) ? post.likes.includes(user?._id || "") : false)
   const [likesCount, setLikesCount] = useState(post.likesCount)
   const [isLiking, setIsLiking] = useState(false)
 
-  const handleLike = async () => {
+  const handleLike = async (): Promise<void> => {
     if (!user || isLiking) return
     
     setIsLiking(true)
@@ -40,14 +55,10 @@ const useLike = (post, onUpdate) => {
     setLikesCount(isLiked ? likesCount - 1 : likesCount + 1)
 
     try {
-      const response = await apiClient.likePost(post._id)
+      const response = await apiClient.likePost(post._id) as any
       setIsLiked(response.isLiked)
       setLikesCount(response.likesCount)
-      
-      onUpdate?.({
-        likes: response.isLiked ? [...post.likes, user._id] : post.likes.filter((id) => id !== user._id),
-        likesCount: response.likesCount,
-      })
+      onUpdate?.(post._id)
     } catch (error) {
       setIsLiked(previousLiked)
       setLikesCount(previousCount)
@@ -65,14 +76,15 @@ const useLike = (post, onUpdate) => {
 }
 
 // Custom hook for managing comments
-const useComments = (postId) => {
-  const [comments, setComments] = useState([])
+const useComments = (postId: string) => {
+  const [comments, setComments] = useState<CommentType[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
+  const { user } = useAuth()
 
-  const fetchComments = async () => {
+  const fetchComments = async (): Promise<void> => {
     setCommentsLoading(true)
     try {
-      const response = await apiClient.getComments(postId)
+      const response = await apiClient.getComments(postId) as any
       setComments(response.comments || [])
     } catch {
       setComments([])
@@ -81,11 +93,9 @@ const useComments = (postId) => {
     }
   }
 
-  const addComment = async (content, parentId, imageFile) => {
-    const { user } = useAuth()
+  const addComment = async (content: string, parentId?: string, imageFile?: File) => {
     if (!user?._id || !content.trim()) return
-    
-    await apiClient.addComment({ postId, userId: user._id, content, parentId })
+    await apiClient.addComment({ postId, userId: user._id, content, parentId, imageFile })
     await fetchComments()
   }
 
@@ -93,24 +103,27 @@ const useComments = (postId) => {
 }
 
 // Reusable Comment Input Component
-const CommentInput = ({ onSubmit, placeholder = "Write a comment...", className = "" }) => {
+interface CommentInputProps {
+  onSubmit: (content: string, imageFile?: File) => void;
+  placeholder?: string;
+  className?: string;
+}
+const CommentInput = ({ onSubmit, placeholder = "Write a comment...", className = "" }: CommentInputProps) => {
   const { user } = useAuth()
-  const [content, setContent] = useState("")
-  const [showEmoji, setShowEmoji] = useState(false)
-  const [selectedImage, setSelectedImage] = useState(null)
-  const [imagePreview, setImagePreview] = useState(null)
+  const [content, setContent] = useState<string>("")
+  const [showEmoji, setShowEmoji] = useState<boolean>(false)
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
 
-  const handleImageChange = (e) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setSelectedImage(file)
-      setImagePreview(URL.createObjectURL(file))
-    }
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    setSelectedImage(file)
+    setImagePreview(file ? URL.createObjectURL(file) : null)
   }
 
   const handleSubmit = () => {
     if (!content.trim()) return
-    onSubmit(content, selectedImage)
+    onSubmit(content, selectedImage ?? undefined)
     setContent("")
     setSelectedImage(null)
     setImagePreview(null)
@@ -150,7 +163,7 @@ const CommentInput = ({ onSubmit, placeholder = "Write a comment...", className 
         </div>
         {showEmoji && (
           <div className="absolute z-50 mt-2 right-2">
-            <Picker data={data} onEmojiSelect={(e) => setContent(content + (e.native || e.shortcodes || ""))} theme="auto" />
+            <Picker data={data} onEmojiSelect={(e: any) => setContent(content + (e.native || e.shortcodes || ""))} theme="auto" />
           </div>
         )}
         {imagePreview && (
@@ -175,11 +188,26 @@ const CommentInput = ({ onSubmit, placeholder = "Write a comment...", className 
 }
 
 // Instagram-style Comment Component
-const Comment = ({ comment, onReply, level = 0 }) => {
+interface CommentType {
+  _id: string;
+  user?: {
+    username?: string;
+    profilePic?: string;
+  };
+  content: string;
+  createdAt: string;
+  replies?: CommentType[];
+}
+interface CommentProps {
+  comment: CommentType;
+  onReply: (content: string, parentId?: string, imageFile?: File) => void;
+  level?: number;
+}
+const Comment = ({ comment, onReply, level = 0 }: CommentProps) => {
   const [showReplyInput, setShowReplyInput] = useState(false)
   const [showReplies, setShowReplies] = useState(false)
 
-  const handleReply = (content, imageFile) => {
+  const handleReply = (content: string, imageFile?: File) => {
     onReply(content, comment._id, imageFile)
     setShowReplyInput(false)
   }
@@ -235,7 +263,7 @@ const Comment = ({ comment, onReply, level = 0 }) => {
 
       {showReplies && comment.replies && comment.replies.length > 0 && (
         <div className="ml-6 sm:ml-11 space-y-2 sm:space-y-3 border-l-2 border-gray-200 dark:border-gray-700 pl-3 sm:pl-4">
-          {comment.replies.map(reply => (
+          {comment.replies.map((reply: CommentType) => (
             <Comment key={reply._id} comment={reply} onReply={onReply} level={level + 1} />
           ))}
         </div>
@@ -245,7 +273,7 @@ const Comment = ({ comment, onReply, level = 0 }) => {
 }
 
 // Utility function
-const formatTimeAgo = (dateString) => {
+const formatTimeAgo = (dateString: string) => {
   const date = new Date(dateString)
   const now = new Date()
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
@@ -257,7 +285,14 @@ const formatTimeAgo = (dateString) => {
 }
 
 // Main PostCard Component
-export function PostCard({ post, onUpdate, onDelete }) {
+interface PostCardProps {
+  post: Post;
+  onUpdate?: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  className?: string;
+  onProfileClick?: () => void;
+}
+export function PostCard({ post, onUpdate, onDelete, className, onProfileClick }: PostCardProps) {
   const { user } = useAuth()
   const { toast } = useToast()
   const [showReplies, setShowReplies] = useState(false)
@@ -292,23 +327,40 @@ export function PostCard({ post, onUpdate, onDelete }) {
         <CardContent className="p-3 sm:p-6 w-full">
           {/* Post Header */}
           <div className="flex items-start space-x-2 sm:space-x-4">
-            <Avatar className="w-8 h-8 sm:w-12 sm:h-12 ring-1 sm:ring-2 ring-primary/10 flex-shrink-0">
-              {!post.isAnonymous && post.user?.profilePic && (
-                <AvatarImage src={post.user.profilePic || "/placeholder.svg"} />
+            <div className="flex items-start gap-2">
+              {post.isAnonymous ? (
+                <Avatar className="w-8 h-8 sm:w-12 sm:h-12 ring-1 sm:ring-2 ring-primary/10 flex-shrink-0">
+                  <AvatarFallback className="bg-muted text-xs">?</AvatarFallback>
+                </Avatar>
+              ) : (
+                <a href={post.user?.username ? `/profile/${post.user.username}` : undefined} tabIndex={post.user?.username ? 0 : -1} aria-label="View profile">
+                  <Avatar className="w-8 h-8 sm:w-12 sm:h-12 ring-1 sm:ring-2 ring-primary/10 flex-shrink-0 hover:ring-primary/40 transition">
+                    {post.user?.profilePic && (
+                      <AvatarImage src={post.user.profilePic || "/placeholder.svg"} />
+                    )}
+                    <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs sm:text-sm">
+                      {post.user?.username?.slice(0, 2).toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                </a>
               )}
-              <AvatarFallback className={post.isAnonymous ? "bg-muted text-xs" : "bg-primary/10 text-primary font-semibold text-xs sm:text-sm"}>
-                {post.isAnonymous ? "?" : post.user?.username?.slice(0, 2).toUpperCase() || "U"}
-              </AvatarFallback>
-            </Avatar>
-
-            <div className="flex-1 min-w-0 space-y-2 sm:space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm sm:text-base truncate">
-                    {post.isAnonymous ? "Anonymous Student" : post.user?.username || "Unknown User"}
-                  </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">{formatTimeAgo(post.createdAt)}</p>
-                </div>
+              <div className="flex-1 min-w-0 space-y-2 sm:space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0 flex-1">
+                    {post.isAnonymous ? (
+                      <p className="font-semibold text-sm sm:text-base truncate">Anonymous Student</p>
+                    ) : (
+                      <a
+                        href={post.user?.username ? `/profile/${post.user.username}` : undefined}
+                        className="font-semibold text-sm sm:text-base truncate hover:underline hover:text-blue-600 transition"
+                        tabIndex={post.user?.username ? 0 : -1}
+                        aria-label="View profile"
+                      >
+                        {post.user?.username || "Unknown User"}
+                      </a>
+                    )}
+                    <p className="text-xs sm:text-sm text-muted-foreground">{formatTimeAgo(post.createdAt)}</p>
+                  </div>
                 {user?._id === post.userId && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -392,7 +444,6 @@ export function PostCard({ post, onUpdate, onDelete }) {
                     onSubmit={(content, imageFile) => addComment(content, undefined, imageFile)}
                     placeholder="Write a comment..."
                   />
-                  
                   {commentsLoading ? (
                     <div className="text-center text-xs sm:text-sm text-muted-foreground py-4">
                       Loading comments...
@@ -400,13 +451,14 @@ export function PostCard({ post, onUpdate, onDelete }) {
                   ) : (
                     <div className="space-y-3 sm:space-y-4">
                       {comments.map(comment => (
-                        <Comment key={comment._id} comment={comment} onReply={addComment} />
+                        <Comment key={comment._id} comment={comment} onReply={(content, parentId, imageFile) => addComment(content, parentId, imageFile)} />
                       ))}
                     </div>
                   )}
                 </div>
               )}
             </div>
+          </div>
           </div>
         </CardContent>
       </Card>
