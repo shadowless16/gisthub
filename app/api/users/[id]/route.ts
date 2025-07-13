@@ -23,31 +23,31 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     let body: any = {}
     let isFormData = false
+    // Try to parse as FormData first (for file uploads)
     try {
-      // Try to parse as JSON
-      body = await request.json()
+      const formData = await request.formData()
+      isFormData = true
+      body = {}
+      for (const [key, value] of formData.entries()) {
+        body[key] = value
+      }
+      // Handle profilePic file upload
+      if (formData.get("profilePic") instanceof File) {
+        const file = formData.get("profilePic") as File
+        if (file && file.size > 0) {
+          const arrayBuffer = await file.arrayBuffer()
+          const buffer = Buffer.from(arrayBuffer)
+          const ext = path.extname(file.name) || ".png"
+          const fileName = `user_${id}_${Date.now()}${ext}`
+          const uploadPath = path.join(process.cwd(), "public", "uploads", fileName)
+          await writeFile(uploadPath, buffer)
+          body.profilePic = `/uploads/${fileName}`
+        }
+      }
     } catch {
-      // If JSON fails, try FormData
+      // If FormData fails, try JSON
       try {
-        const formData = await request.formData()
-        isFormData = true
-        body = {}
-        for (const [key, value] of formData.entries()) {
-          body[key] = value
-        }
-        // Handle profilePic file upload
-        if (formData.get("profilePic") instanceof File) {
-          const file = formData.get("profilePic") as File
-          if (file && file.size > 0) {
-            const arrayBuffer = await file.arrayBuffer()
-            const buffer = Buffer.from(arrayBuffer)
-            const ext = path.extname(file.name) || ".png"
-            const fileName = `user_${id}_${Date.now()}${ext}`
-            const uploadPath = path.join(process.cwd(), "public", "uploads", fileName)
-            await writeFile(uploadPath, buffer)
-            body.profilePic = `/uploads/${fileName}`
-          }
-        }
+        body = await request.json()
       } catch {
         return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
       }
