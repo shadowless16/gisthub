@@ -59,6 +59,7 @@
     "mongodb-client-encryption": "latest",
     "mongoose": "^8.16.2",
     "next": "14.2.16",
+    "next-auth": "^4.24.11",
     "next-themes": "latest",
     "react": "^18",
     "react-day-picker": "8.10.1",
