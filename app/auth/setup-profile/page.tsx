@@ -30,6 +30,7 @@ export default function SetupProfilePage() {
     portfolio: user?.socialLinks?.portfolio || "",
     interests: user?.interests?.join(", ") || "", // Join array back to string for input
     location: user?.location || "",
+    branch: user?.branch || "",
   })
   const [isLoading, setIsLoading] = useState(false) // State for loading
   const [cropOpen, setCropOpen] = useState(false)
@@ -49,6 +50,7 @@ export default function SetupProfilePage() {
         portfolio: user.socialLinks?.portfolio || "",
         interests: user.interests?.join(", ") || "",
         location: user.location || "",
+        branch: user.branch || "",
       });
     }
   }, [user]); // Depend on user object
@@ -126,7 +128,7 @@ export default function SetupProfilePage() {
     e.preventDefault()
     setIsLoading(true)
 
-    const requiredFields = ["profilePicture", "bio", "interests", "location"]
+    const requiredFields = ["profilePicture", "bio", "interests", "location", "branch"]
     for (const field of requiredFields) {
       const value = profileData[field as keyof typeof profileData];
 
@@ -181,6 +183,7 @@ export default function SetupProfilePage() {
           socialLinks: socialLinks,
           interests: interestsArray,
           location: profileData.location,
+          branch: profileData.branch,
         }),
       })
 
@@ -341,6 +344,17 @@ export default function SetupProfilePage() {
                 placeholder="e.g. Lagos, Abuja, Ibadan"
                 value={profileData.location}
                 onChange={(e) => setProfileData({ ...profileData, location: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="branch">Branch</Label>
+              <Input
+                id="branch"
+                type="text"
+                placeholder="e.g. Computer Science, Electrical Engineering"
+                value={profileData.branch}
+                onChange={(e) => setProfileData({ ...profileData, branch: e.target.value })}
                 required
               />
             </div>
