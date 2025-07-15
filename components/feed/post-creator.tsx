@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import Cropper from "react-easy-crop"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -23,6 +24,11 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
+  const [cropOpen, setCropOpen] = useState(false)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)
+  const [cropAspect, setCropAspect] = useState(16/9)
   const [isLoading, setIsLoading] = useState(false)
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
 
@@ -65,14 +71,54 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setSelectedImageFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
         setSelectedImage(e.target?.result as string);
+        setCropOpen(true);
       };
       reader.readAsDataURL(file);
     }
   }  
+
+  const onCropComplete = (_: any, croppedAreaPixels: any) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  };
+
+  const handleCropSave = async () => {
+    if (!selectedImage || !croppedAreaPixels) return;
+    // Convert cropped area to blob
+    const createImage = (url: string) => new Promise<HTMLImageElement>((resolve) => {
+      const img = new window.Image();
+      img.src = url;
+      img.onload = () => resolve(img);
+    });
+    const getCroppedImg = async (imageSrc: string, crop: any) => {
+      const image = await createImage(imageSrc);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = crop.width;
+      canvas.height = crop.height;
+      ctx?.drawImage(
+        image,
+        crop.x,
+        crop.y,
+        crop.width,
+        crop.height,
+        0,
+        0,
+        crop.width,
+        crop.height
+      );
+      return new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+        }, 'image/jpeg');
+      });
+    };
+    const croppedBlob = await getCroppedImg(selectedImage, croppedAreaPixels);
+    setSelectedImageFile(new File([croppedBlob], "post-image.jpg", { type: croppedBlob.type }));
+    setCropOpen(false);
+  };
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -148,6 +194,41 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
                       >
                         Remove
                       </Button>
+                    </div>
+                  )}
+
+                  {/* Cropping Modal */}
+                  {cropOpen && selectedImage && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
+                      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+                        <div className="p-4 border-b flex items-center justify-between">
+                          <h3 className="text-lg font-semibold">Crop Image</h3>
+                          <Button variant="ghost" size="icon" onClick={() => setCropOpen(false)}>
+                            X
+                          </Button>
+                        </div>
+                        <div className="flex gap-2 px-4 py-2 border-b">
+                          <span className="text-xs font-medium">Aspect Ratio:</span>
+                          <Button size="sm" variant={cropAspect === 1 ? "default" : "secondary"} onClick={() => setCropAspect(1)}>1:1</Button>
+                          <Button size="sm" variant={cropAspect === 4/5 ? "default" : "secondary"} onClick={() => setCropAspect(4/5)}>4:5</Button>
+                          <Button size="sm" variant={cropAspect === 16/9 ? "default" : "secondary"} onClick={() => setCropAspect(16/9)}>16:9</Button>
+                        </div>
+                        <div className="relative w-full h-80 bg-black">
+                          <Cropper
+                            image={selectedImage}
+                            crop={crop}
+                            zoom={zoom}
+                            aspect={cropAspect}
+                            onCropChange={setCrop}
+                            onZoomChange={setZoom}
+                            onCropComplete={onCropComplete}
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2 p-4 border-t">
+                          <Button variant="secondary" onClick={() => setCropOpen(false)}>Cancel</Button>
+                          <Button onClick={handleCropSave} className="bg-primary text-white">Save Crop</Button>
+                        </div>
+                      </div>
                     </div>
                   )}
 

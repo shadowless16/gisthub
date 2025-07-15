@@ -426,14 +426,14 @@ export function PostCard({ post, onUpdate, onDelete, className, onProfileClick }
                     <span className="text-xs sm:text-sm font-medium">Comment</span>
                   </Button>
 
-                  <Button
+                  {/* <Button
                     variant="ghost"
                     size="sm"
                     className="flex items-center space-x-1 sm:space-x-2 hover:bg-green-50 hover:text-green-500 text-muted-foreground flex-shrink-0"
                   >
                     <Share className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span className="text-xs sm:text-sm font-medium">Share</span>
-                  </Button>
+                  </Button> */}
                 </div>
               </div>
 

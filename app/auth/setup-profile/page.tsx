@@ -8,10 +8,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Camera, Upload, Loader2 } from "lucide-react"
+import Cropper from "react-easy-crop"
 
 import { useAuth } from "@/lib/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
+import { apiClient } from "@/lib/api-client"
 
 export default function SetupProfilePage() {
   const { user, refreshUser } = useAuth()
@@ -30,6 +32,10 @@ export default function SetupProfilePage() {
     location: user?.location || "",
   })
   const [isLoading, setIsLoading] = useState(false) // State for loading
+  const [cropOpen, setCropOpen] = useState(false)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)
 
   // Populate profileData when user data loads or changes
   useEffect(() => {
@@ -51,28 +57,59 @@ export default function SetupProfilePage() {
   // Upload profile picture to backend and set URL
   // This function now correctly accesses `setIsLoading` and `setProfileData`
   const handleProfilePictureUpload = async (file: File) => {
-    setIsLoading(true)
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setProfileData((prev) => ({ ...prev, profilePicture: e.target?.result as string }));
+      setCropOpen(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onCropComplete = (_: any, croppedAreaPixels: any) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  };
+
+  const handleCropSave = async () => {
+    if (!profileData.profilePicture || !croppedAreaPixels) return;
+    const createImage = (url: string) => new Promise<HTMLImageElement>((resolve) => {
+      const img = new window.Image();
+      img.src = url;
+      img.onload = () => resolve(img);
+    });
+    const getCroppedImg = async (imageSrc: string, crop: any) => {
+      const image = await createImage(imageSrc);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = crop.width;
+      canvas.height = crop.height;
+      ctx?.drawImage(
+        image,
+        crop.x,
+        crop.y,
+        crop.width,
+        crop.height,
+        0,
+        0,
+        crop.width,
+        crop.height
+      );
+      return new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+        }, 'image/jpeg');
+      });
+    };
+    const croppedBlob = await getCroppedImg(profileData.profilePicture, croppedAreaPixels);
+    const croppedFile = new File([croppedBlob], "profile-pic.jpg", { type: croppedBlob.type });
+    setCropOpen(false);
+    setIsLoading(true);
     try {
-      const formData = new FormData()
-      formData.append("profileImage", file) // 'profileImage' matches the backend's expected key
-
-      const res = await fetch("/api/upload-image", {
-        method: "POST",
-        body: formData, // FormData automatically sets 'Content-Type: multipart/form-data'
-      })
-
-      if (!res.ok) {
-        // Attempt to parse error message from backend
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error?.error || "Failed to upload image.");
-      }
-
-      const data = await res.json();
-      if (data?.imageUrl) {
-        setProfileData((prevData) => ({ ...prevData, profilePicture: data.imageUrl }));
+      const result = await apiClient.uploadImage(croppedFile);
+      if (result?.url) {
+        setProfileData((prevData) => ({ ...prevData, profilePicture: result.url }));
         toast({ title: "Profile picture uploaded!", description: "Image uploaded successfully." });
       } else {
-        throw new Error("No image URL returned from server.");
+        throw new Error("No image URL returned from Cloudinary.");
       }
     } catch (err) {
       toast({
@@ -83,7 +120,7 @@ export default function SetupProfilePage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -190,7 +227,6 @@ export default function SetupProfilePage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     if (file) {
-                      // Call the new upload handler directly
                       handleProfilePictureUpload(file)
                     }
                   }}
@@ -202,6 +238,35 @@ export default function SetupProfilePage() {
                 >
                   <Upload className="w-4 h-4 text-white" />
                 </Label>
+
+                {/* Cropping Modal for Profile Picture */}
+                {cropOpen && profileData.profilePicture && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+                      <div className="p-4 border-b flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">Crop Profile Picture</h3>
+                        <Button variant="ghost" size="icon" onClick={() => setCropOpen(false)}>
+                          X
+                        </Button>
+                      </div>
+                      <div className="relative w-full h-80 bg-black">
+                        <Cropper
+                          image={profileData.profilePicture}
+                          crop={crop}
+                          zoom={zoom}
+                          aspect={1}
+                          onCropChange={setCrop}
+                          onZoomChange={setZoom}
+                          onCropComplete={onCropComplete}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2 p-4 border-t">
+                        <Button variant="secondary" onClick={() => setCropOpen(false)}>Cancel</Button>
+                        <Button onClick={handleCropSave} className="bg-primary text-white">Save Crop</Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

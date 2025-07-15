@@ -14,10 +14,7 @@ import { ProfileHeader } from "@/components/profile/profile-header"
 import { PostCard } from "@/components/feed/post-card"
 import { PostCreator } from "@/components/feed/post-creator"
 import { MainLayout } from "@/components/layout/main-layout"
-import { User as UserIcon, Mail, Building2, Briefcase, CircleDot, MapPin, Calendar, Clock, Link as LinkIcon, Star } from "lucide-react" // Renamed Link to LinkIcon to avoid conflict
-
-// IMPORTANT: Import your User type here from its definition file
-// import { User } from '@/lib/types'; // Adjust path if needed. This is the User interface for authenticated user.
+import { User as UserIcon, Mail, Building2, Briefcase, CircleDot, MapPin, Calendar, Clock, Link as LinkIcon, Star } from "lucide-react" 
 import type { User } from '@/lib/hooks/use-auth'; // Update this path to where your User type is actually defined
 
 
