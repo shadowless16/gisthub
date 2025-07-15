@@ -7,6 +7,7 @@ export interface Comment {
   content: string
   parentId?: ObjectId | null
   createdAt: Date
+  imageURL?: string | null
 }
 
 export interface CommentResponse {

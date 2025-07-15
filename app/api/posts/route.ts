@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     const newPost: Post = {
       userId: new ObjectId(currentUser.userId),
       content: content.trim(),
-      imageURL,
+      imageURL: imageURL || null,
       isAnonymous: Boolean(isAnonymous),
       likes: [],
       createdAt: new Date(),

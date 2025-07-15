@@ -25,35 +25,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const rawText = await request.clone().text()
 
     let body: any = {}
-    let isFormData = false
-    // Try to parse as FormData first (for file uploads)
     try {
-      const formData = await request.formData()
-      isFormData = true
-      body = {}
-      for (const [key, value] of formData.entries()) {
-        body[key] = value
-      }
-      // Handle profilePic file upload
-      if (formData.get("profilePic") instanceof File) {
-        const file = formData.get("profilePic") as File
-        if (file && file.size > 0) {
-          const arrayBuffer = await file.arrayBuffer()
-          const buffer = Buffer.from(arrayBuffer)
-          const ext = path.extname(file.name) || ".png"
-          const fileName = `user_${id}_${Date.now()}${ext}`
-          const uploadPath = path.join(process.cwd(), "public", "uploads", fileName)
-          await writeFile(uploadPath, buffer)
-          body.profilePic = `/uploads/${fileName}`
-        }
-      }
+      body = JSON.parse(rawText)
     } catch {
-      // If FormData fails, try JSON
-      try {
-        body = JSON.parse(rawText)
-      } catch {
-        return NextResponse.json({ error: "Invalid request body", debug: { rawText } }, { status: 400 })
-      }
+      return NextResponse.json({ error: "Invalid request body", debug: { rawText } }, { status: 400 })
     }
 
     // Allow partial updates for both JSON and FormData

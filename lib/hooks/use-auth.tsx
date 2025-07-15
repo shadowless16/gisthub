@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { apiClient } from "@/lib/api-client"
 
-interface User {
+export interface User {
   _id: string
   username: string
   email: string

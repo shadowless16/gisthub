@@ -13,6 +13,20 @@ interface ApiResponse<T = any> {
 }
 
 class ApiClient {
+  async uploadImage(imageFile: File): Promise<{ url: string }> {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    const token = localStorage.getItem("auth-token");
+    const headers: HeadersInit = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const response = await fetch(`/api/upload`, {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+      headers: headers
+    });
+    return this.handleResponse(response);
+  }
   async getUserByUsername(username: string) {
     const response = await fetch(`${API_BASE_URL}/api/users/by-username/${username}`, {
       headers: this.getAuthHeaders(),
@@ -31,32 +45,24 @@ class ApiClient {
   }
 
   async updateUser(userId: string, data: { username?: string; bio?: string; profilePic?: File | null }) {
-    let body: BodyInit;
-    let headers: HeadersInit = {};
-    let isForm = false;
-    if (data.profilePic) {
-      // Use FormData if uploading a file
-      isForm = true;
-      const formData = new FormData();
-      if (data.username) formData.append("username", data.username);
-      if (data.bio !== undefined) formData.append("bio", data.bio);
-      formData.append("profilePic", data.profilePic);
-      body = formData;
-    } else {
-      // Use JSON for simple updates
-      body = JSON.stringify({
-        ...(data.username !== undefined ? { username: data.username } : {}),
-        ...(data.bio !== undefined ? { bio: data.bio } : {})
-      });
-      headers["Content-Type"] = "application/json";
+    let profilePicUrl: string | null | undefined;
+    if (data.profilePic instanceof File) {
+      const uploadResult = await this.uploadImage(data.profilePic);
+      profilePicUrl = uploadResult.url;
+    } else if (data.profilePic === null) {
+      profilePicUrl = null;
     }
-    const token = localStorage.getItem("auth-token");
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    headers["Accept"] = "application/json";
+    const payload: { username?: string; bio?: string; profilePic?: string | null } = {
+      ...(data.username !== undefined ? { username: data.username } : {}),
+      ...(data.bio !== undefined ? { bio: data.bio } : {}),
+    };
+    if (profilePicUrl !== undefined) {
+      payload.profilePic = profilePicUrl;
+    }
     const response = await fetch(`${API_BASE_URL}/api/users/${userId}` , {
       method: "PATCH",
-      headers,
-      body,
+      headers: { ...this.getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
       credentials: "include",
     });
     return this.handleResponse(response);
@@ -179,14 +185,24 @@ class ApiClient {
     return this.handleResponse(response)
   }
 
-  async createPost(postData: { content: string; imageURL?: string; isAnonymous?: boolean }) {
+  async createPost(postData: { content: string; imageFile?: File; isAnonymous?: boolean }) {
+    let imageUrl: string | undefined;
+    if (postData.imageFile) {
+      const uploadResult = await this.uploadImage(postData.imageFile);
+      imageUrl = uploadResult.url;
+    }
+    const payload = {
+      content: postData.content,
+      imageURL: imageUrl,
+      isAnonymous: postData.isAnonymous,
+    };
     const response = await fetch(`${API_BASE_URL}/api/posts`, {
       method: "POST",
       headers: this.getAuthHeaders(),
-      body: JSON.stringify(postData),
+      body: JSON.stringify(payload),
       credentials: "include",
-    })
-    return this.handleResponse(response)
+    });
+    return this.handleResponse(response);
   }
 
   async likePost(postId: string) {
@@ -219,26 +235,21 @@ class ApiClient {
   }
 
   async createStory({ image, text }: { image?: File; text?: string }) {
-    let response;
+    let imageUrl: string | undefined;
     if (image) {
-      const formData = new FormData();
-      formData.append("image", image);
-      if (text) formData.append("text", text);
-      const token = localStorage.getItem("auth-token");
-      response = await fetch(`/api/stories`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: formData,
-        credentials: "include",
-      });
-    } else {
-      response = await fetch(`/api/stories`, {
-        method: "POST",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ text }),
-        credentials: "include",
-      });
+      const uploadResult = await this.uploadImage(image);
+      imageUrl = uploadResult.url;
     }
+    const payload = {
+      imageURL: imageUrl,
+      text: text,
+    };
+    const response = await fetch(`/api/stories`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+      credentials: "include",
+    });
     return this.handleResponse(response);
   }
 
@@ -258,29 +269,24 @@ class ApiClient {
   }
 
   async addComment({ postId, userId, content, parentId, imageFile }: { postId: string, userId: string, content: string, parentId?: string, imageFile?: File }) {
-    let response: Response;
+    let imageUrl: string | undefined;
     if (imageFile) {
-      const formData = new FormData();
-      formData.append("postId", postId);
-      formData.append("userId", userId);
-      formData.append("content", content);
-      if (parentId) formData.append("parentId", parentId);
-      formData.append("image", imageFile);
-      const token = localStorage.getItem("auth-token");
-      response = await fetch(`/api/comments`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: formData,
-        credentials: "include",
-      });
-    } else {
-      response = await fetch(`/api/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId, userId, content, parentId }),
-        credentials: "include",
-      });
+      const uploadResult = await this.uploadImage(imageFile);
+      imageUrl = uploadResult.url;
     }
+    const payload = {
+      postId: postId,
+      userId: userId,
+      content: content,
+      parentId: parentId,
+      imageURL: imageUrl,
+    };
+    const response = await fetch(`/api/comments`, {
+      method: "POST",
+      headers: this.getAuthHeaders(),
+      body: JSON.stringify(payload),
+      credentials: "include",
+    });
     return this.handleResponse(response);
   }
 }

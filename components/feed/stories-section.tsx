@@ -6,20 +6,32 @@ import { Button } from "@/components/ui/button"
 import { Plus, Camera, X, Image as ImageIcon, Type, Palette, StopCircle } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
+// Define a comprehensive Story interface, assuming this is the primary definition.
+// If Story is defined elsewhere with more properties, consolidate them here.
 interface Story {
-  _id: string
-  userId: string
-  imageUrl?: string
-  text?: string
-  caption?: string
-  backgroundColor?: string
-  textColor?: string
-  createdAt: string
-  expiresAt: string
+  _id: string;
+  userId: string;
+  imageUrl?: string;
+  text?: string;
+  caption?: string;
+  backgroundColor?: string;
+  textColor?: string;
+  createdAt: string;
+  expiresAt: string;
   user?: {
-    username: string
-    profilePic?: string
-  }
+    username: string;
+    profilePic?: string;
+  };
+  // Properties identified as missing from image_070167.png error:
+  views: number;
+  likes: number;
+  replies: number;
+  shares: number;
+}
+
+// Interface for the API response from getStories
+interface GetStoriesResponse {
+  stories: Story[];
 }
 
 export function StoriesSection() {
@@ -30,13 +42,14 @@ export function StoriesSection() {
   const [activeStoryIdx, setActiveStoryIdx] = useState<number | null>(null)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
   const [storyType, setStoryType] = useState<'camera' | 'text' | 'image'>('camera')
   const [textColor, setTextColor] = useState('#FFFFFF')
   const [backgroundColor, setBackground] = useState('linear-gradient(135deg, #667eea 0%, #764ba2 100%)')
   const [caption, setCaption] = useState('')
   const [storyText, setStoryText] = useState('')
   const [isUploading, setIsUploading] = useState(false)
-  
+
   // Camera states
   const [isCameraOpen, setIsCameraOpen] = useState(false)
   const [stream, setStream] = useState<MediaStream | null>(null)
@@ -69,7 +82,8 @@ export function StoriesSection() {
     const fetchStories = async () => {
       setLoading(true);
       try {
-        const response = await apiClient.getStories();
+        // Explicitly type the response from apiClient.getStories()
+        const response = await apiClient.getStories() as GetStoriesResponse;
         setStories(response.stories || []);
         console.log("Fetched Stories:", response.stories);
       } catch (err) {
@@ -85,12 +99,12 @@ export function StoriesSection() {
   // Camera functions
   const startCamera = async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user' } 
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' }
       });
       setStream(mediaStream);
       setIsCameraOpen(true);
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
@@ -113,12 +127,12 @@ export function StoriesSection() {
       const canvas = canvasRef.current;
       const video = videoRef.current;
       const context = canvas.getContext('2d');
-      
+
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      
+
       if (context) {
-        context.drawImage(video, 0, 0);
+        context.drawImage(video, 0, 0, canvas.width, canvas.height); // Added width and height for consistency
         const imageData = canvas.toDataURL('image/jpeg');
         setSelectedImage(imageData);
         setStoryType('image');
@@ -130,6 +144,7 @@ export function StoriesSection() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setSelectedImageFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
         setSelectedImage(e.target?.result as string);
@@ -141,6 +156,7 @@ export function StoriesSection() {
 
   const resetModal = () => {
     setSelectedImage(null);
+    setSelectedImageFile(null);
     setStoryType('camera');
     setTextColor('#FFFFFF');
     setBackground('linear-gradient(135deg, #667eea 0%, #764ba2 100%)');
@@ -154,11 +170,12 @@ export function StoriesSection() {
     setIsUploading(true);
 
     try {
-      let storyData: any = {};
+      let storyData: any = {}; // Keep as 'any' for now, or define specific types for each storyType case
 
       if (storyType === 'text') {
         if (!storyText.trim()) {
           alert('Please enter some text for your story');
+          setIsUploading(false); // Ensure uploading state is reset on early exit
           return;
         }
         storyData = {
@@ -166,30 +183,30 @@ export function StoriesSection() {
           backgroundColor,
           textColor
         };
-      } else if (storyType === 'image' && selectedImage) {
-        // Convert base64 to blob for upload
-        const response = await fetch(selectedImage);
-        const blob = await response.blob();
-        const file = new File([blob], 'story-image.jpg', { type: 'image/jpeg' });
-        
+      } else if (storyType === 'image' && selectedImageFile) {
         storyData = {
-          image: file,
+          image: selectedImageFile,
           caption: caption.trim() || undefined
         };
+      } else {
+        alert('No story content to share!'); // Handle case where no content is ready
+        setIsUploading(false);
+        return;
       }
 
       await apiClient.createStory(storyData);
-      
+
       // Refresh stories
       setLoading(true);
-      const updatedResponse = await apiClient.getStories();
+      // Explicitly type the response from apiClient.getStories()
+      const updatedResponse = await apiClient.getStories() as GetStoriesResponse;
       setStories(updatedResponse.stories || []);
       setLoading(false);
-      
+
       // Reset and close modal
       resetModal();
       setCreateModalOpen(false);
-      
+
     } catch (error) {
       console.error('Error creating story:', error);
       alert('Failed to create story. Please try again.');
@@ -202,7 +219,7 @@ export function StoriesSection() {
     <>
       <div className="flex space-x-4 overflow-x-auto pb-4 px-4 scrollbar-hide">
         <div className="flex flex-col items-center space-y-2 min-w-fit">
-          <div 
+          <div
             className="relative cursor-pointer"
             onClick={() => setCreateModalOpen(true)}
           >
@@ -216,12 +233,12 @@ export function StoriesSection() {
                 </AvatarFallback>
               </Avatar>
             </div>
-            
+
             <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-blue-500 shadow-lg flex items-center justify-center">
               <Plus className="w-3 h-3 text-white" />
             </div>
           </div>
-          
+
           <span className="text-xs text-center max-w-16 truncate font-medium text-gray-700">
             Your Story
           </span>
@@ -257,9 +274,9 @@ export function StoriesSection() {
                       </AvatarFallback>
                     </Avatar>
                   ) : (
-                    <div 
+                    <div
                       className="w-full h-full flex items-center justify-center rounded-full text-xs font-medium text-center p-1"
-                      style={{ 
+                      style={{
                         background: story.backgroundColor || '#f3f4f6',
                         color: story.textColor || '#000000'
                       }}
@@ -269,7 +286,7 @@ export function StoriesSection() {
                   )}
                 </div>
               </div>
-              
+
               <span className="text-xs text-center max-w-16 truncate font-medium text-gray-700">
                 {story.user?.username || "User"}
               </span>
@@ -285,7 +302,7 @@ export function StoriesSection() {
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-800">Create Story</h3>
-              <button 
+              <button
                 onClick={() => {
                   setCreateModalOpen(false);
                   resetModal();
@@ -301,8 +318,8 @@ export function StoriesSection() {
               <button
                 onClick={() => setStoryType('camera')}
                 className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
-                  storyType === 'camera' 
-                    ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600' 
+                  storyType === 'camera'
+                    ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
               >
@@ -312,8 +329,8 @@ export function StoriesSection() {
               <button
                 onClick={() => setStoryType('text')}
                 className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
-                  storyType === 'text' 
-                    ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600' 
+                  storyType === 'text'
+                    ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
               >
@@ -323,8 +340,8 @@ export function StoriesSection() {
               <button
                 onClick={() => setStoryType('image')}
                 className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
-                  storyType === 'image' 
-                    ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600' 
+                  storyType === 'image'
+                    ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-800'
                 }`}
               >
@@ -349,7 +366,7 @@ export function StoriesSection() {
                       </button>
                     </div>
                   )}
-                  
+
                   {isCameraOpen && (
                     <div className="space-y-4">
                       <div className="relative">
@@ -361,7 +378,7 @@ export function StoriesSection() {
                         />
                         <canvas ref={canvasRef} className="hidden" />
                       </div>
-                      
+
                       <div className="flex space-x-3">
                         <button
                           onClick={capturePhoto}
@@ -386,24 +403,24 @@ export function StoriesSection() {
                 <div className="space-y-4">
                   {selectedImage && (
                     <div className="w-full h-64 rounded-lg overflow-hidden">
-                      <img 
-                        src={selectedImage} 
-                        alt="Story preview" 
+                      <img
+                        src={selectedImage}
+                        alt="Story preview"
                         className="w-full h-full object-cover"
                       />
                     </div>
                   )}
-                  
+
                   {!selectedImage && storyType === 'image' && (
                     <div>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
+                      <input
+                        type="file"
+                        accept="image/*"
                         onChange={handleImageUpload}
-                        className="hidden" 
+                        className="hidden"
                         id="image-upload"
                       />
-                      <label 
+                      <label
                         htmlFor="image-upload"
                         className="block w-full p-6 text-center bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
                       >
@@ -412,7 +429,7 @@ export function StoriesSection() {
                       </label>
                     </div>
                   )}
-                  
+
                   {/* Caption Input */}
                   <div>
                     <input
@@ -431,18 +448,18 @@ export function StoriesSection() {
               {/* Text Story */}
               {storyType === 'text' && (
                 <div className="space-y-4">
-                  <div 
+                  <div
                     className="w-full h-64 rounded-lg flex items-center justify-center p-6"
                     style={{ background: backgroundColor }}
                   >
-                    <p 
+                    <p
                       className="text-lg font-medium text-center"
                       style={{ color: textColor }}
                     >
                       {storyText || "Your story text will appear here"}
                     </p>
                   </div>
-                  
+
                   <div>
                     <textarea
                       placeholder="What's on your mind?"
@@ -454,7 +471,7 @@ export function StoriesSection() {
                     />
                     <div className="text-xs text-gray-500 mt-1">{storyText.length}/120 characters</div>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Background
@@ -472,7 +489,7 @@ export function StoriesSection() {
                       ))}
                     </div>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Text Color
@@ -536,7 +553,9 @@ export function StoriesSection() {
             else setActiveStoryIdx((idx) => (idx && idx >= updated.length ? updated.length - 1 : idx));
           }
         }}
-        canDelete={activeStoryIdx !== null && user && stories[activeStoryIdx]?.userId === user._id}
+        // Fix for Type 'boolean | null' is not assignable to type 'boolean | undefined'.
+        // Explicitly cast to boolean, which results in boolean | undefined if `activeStoryIdx` is null.
+        canDelete={activeStoryIdx !== null && user && stories[activeStoryIdx]?.userId === user._id ? true : undefined}
       />
     </>
   )

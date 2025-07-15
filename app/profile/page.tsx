@@ -1,3 +1,4 @@
+// app/profile/page.tsx
 "use client"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -7,16 +8,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input"
 import { useState, useEffect, useCallback } from "react"
 import { apiClient } from "@/lib/api-client"
-import { useAuth } from "@/lib/hooks/use-auth"
+import { useAuth } from "@/lib/hooks/use-auth" // Assuming useAuth now returns User | null
 
 import { ProfileHeader } from "@/components/profile/profile-header"
 import { PostCard } from "@/components/feed/post-card"
 import { PostCreator } from "@/components/feed/post-creator"
 import { MainLayout } from "@/components/layout/main-layout"
-import { User, Mail, Building2, Briefcase, CircleDot, MapPin, Calendar, Clock, Link as LinkIcon, Star } from "lucide-react" // Renamed Link to LinkIcon to avoid conflict
+import { User as UserIcon, Mail, Building2, Briefcase, CircleDot, MapPin, Calendar, Clock, Link as LinkIcon, Star } from "lucide-react" // Renamed Link to LinkIcon to avoid conflict
 
-// Import SVG icons as React Components
-
+// IMPORTANT: Import your User type here from its definition file
+// import { User } from '@/lib/types'; // Adjust path if needed. This is the User interface for authenticated user.
+import type { User } from '@/lib/hooks/use-auth'; // Update this path to where your User type is actually defined
 
 
 // Define the shape of a Post object
@@ -100,7 +102,7 @@ const SocialLinkCard = ({ platform, handle, url }: SocialLinkCardProps) => {
       rel="noopener noreferrer"
       className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:shadow-sm transition-all"
     >
-      <div className={`p-2 rounded-lg flex items-center justify-center ${platformColors[platform as keyof typeof platformColors]}`}> 
+      <div className={`p-2 rounded-lg flex items-center justify-center ${platformColors[platform as keyof typeof platformColors]}`}>
         <img src={platformIcons[platform]} alt={platform} className="h-5 w-5" />
       </div>
       <div>
@@ -113,207 +115,218 @@ const SocialLinkCard = ({ platform, handle, url }: SocialLinkCardProps) => {
 
 
 export default function ProfilePage() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser } = useAuth(); // user is now typed as User | null
 
   // Redirect to onboarding if required fields are missing
   useEffect(() => {
-    if (!user) return;
-    const requiredFields = [
+    if (!user) return; // Exit if user is null or undefined
+
+    const requiredFields: Array<keyof User> = [ // Explicitly type requiredFields as keys of User
       'bio',
       'interests',
       'location',
       'profilePic',
       'branch'
     ];
-    // Check for missing or empty fields
+
     const missing = requiredFields.some(field => {
+      // Type assertion for user.interests as it's already guarded by `Array.isArray`
       if (field === 'interests') {
         return !Array.isArray(user.interests) || user.interests.length === 0;
       }
-      return !user[field] || (typeof user[field] === 'string' && user[field].trim() === '');
+
+      // Check if the property exists and is not null/undefined/empty string
+      const value = user[field];
+      return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
     });
+
     if (missing) {
       window.location.href = '/auth/setup-profile';
     }
   }, [user]);
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loadingPosts, setLoadingPosts] = useState(false)
-  const [postsError, setPostsError] = useState<string | null>(null)
-  const [hasMorePosts, setHasMorePosts] = useState(true)
-  const [skipPosts, setSkipPosts] = useState(0)
-  const postsLimit = 20
+
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [postsError, setPostsError] = useState<string | null>(null);
+  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const [skipPosts, setSkipPosts] = useState(0);
+  const postsLimit = 20;
 
   // State for the followers/following modal
-  const [modalOpen, setModalOpen] = useState<null | 'followers' | 'following'>(null)
-  const [modalUsers, setModalUsers] = useState<ModalUser[]>([])
-  const [filteredModalUsers, setFilteredModalUsers] = useState<ModalUser[]>([])
-  const [modalLoading, setModalLoading] = useState(false)
-  const [modalError, setModalError] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [followingUsersSet, setFollowingUsersSet] = useState<Set<string>>(new Set())
+  const [modalOpen, setModalOpen] = useState<null | 'followers' | 'following'>(null);
+  const [modalUsers, setModalUsers] = useState<ModalUser[]>([]);
+  const [filteredModalUsers, setFilteredModalUsers] = useState<ModalUser[]>([]);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [followingUsersSet, setFollowingUsersSet] = useState<Set<string>>(new Set());
 
   // Memoized function to fetch user posts
   const fetchUserPosts = useCallback(async (append = false, customSkip?: number) => {
-    if (!user?._id) return
+    if (!user?._id) return;
 
-    setLoadingPosts(true)
-    setPostsError(null)
+    setLoadingPosts(true);
+    setPostsError(null);
 
     try {
-      const response = await apiClient.getUserPosts(user._id, { limit: postsLimit, skip: customSkip ?? skipPosts })
+      const response = await apiClient.getUserPosts(user._id, { limit: postsLimit, skip: customSkip ?? skipPosts });
 
       if (response && typeof response === 'object' && 'posts' in response && Array.isArray((response as any).posts)) {
         if (append) {
-          setPosts(prev => [...prev, ...(response as any).posts])
+          setPosts(prev => [...prev, ...(response as any).posts]);
         } else {
-          setPosts((response as any).posts)
+          setPosts((response as any).posts);
         }
-        setHasMorePosts((response as any).hasMore)
+        setHasMorePosts((response as any).hasMore);
       } else {
-        setPostsError('Failed to load posts: Invalid response')
+        setPostsError('Failed to load posts: Invalid response');
       }
     } catch (err) {
-      setPostsError(err instanceof Error ? err.message : "Failed to load posts")
+      setPostsError(err instanceof Error ? err.message : "Failed to load posts");
     } finally {
-      setLoadingPosts(false)
+      setLoadingPosts(false);
     }
-  }, [user?._id, skipPosts])
+  }, [user?._id, skipPosts]);
 
   // Effect to fetch posts when user ID changes
   useEffect(() => {
-    setSkipPosts(0)
-    fetchUserPosts(false, 0)
-  }, [user?._id, fetchUserPosts])
+    setSkipPosts(0);
+    fetchUserPosts(false, 0);
+  }, [user?._id, fetchUserPosts]);
 
   // Function to load more posts for infinite scrolling
   const loadMorePosts = () => {
-    const newSkip = skipPosts + postsLimit
-    setSkipPosts(newSkip)
-    fetchUserPosts(true, newSkip)
-  }
+    const newSkip = skipPosts + postsLimit;
+    setSkipPosts(newSkip);
+    fetchUserPosts(true, newSkip);
+  };
 
   // Handle post creation to refresh the post list
   const handlePostCreated = () => {
-    setSkipPosts(0)
-    fetchUserPosts(false, 0)
-  }
+    setSkipPosts(0);
+    fetchUserPosts(false, 0);
+  };
 
   // Filter modal users based on search query
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setFilteredModalUsers(modalUsers)
+      setFilteredModalUsers(modalUsers);
     } else {
       const filtered = modalUsers.filter(u =>
         u.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.bio?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-      setFilteredModalUsers(filtered)
+      );
+      setFilteredModalUsers(filtered);
     }
-  }, [searchQuery, modalUsers])
+  }, [searchQuery, modalUsers]);
 
   // Handle follow/unfollow toggle for a user in the modal
   const handleFollowToggle = async (targetUserId: string) => {
     try {
-      await apiClient.followUser(targetUserId)
-      const isCurrentlyFollowing = followingUsersSet.has(targetUserId)
+      await apiClient.followUser(targetUserId);
+      const isCurrentlyFollowing = followingUsersSet.has(targetUserId);
 
       setFollowingUsersSet(prev => {
-        const newSet = new Set(prev)
+        const newSet = new Set(prev);
         if (isCurrentlyFollowing) {
-          newSet.delete(targetUserId)
+          newSet.delete(targetUserId);
         } else {
-          newSet.add(targetUserId)
+          newSet.add(targetUserId);
         }
-        return newSet
-      })
+        return newSet;
+      });
 
       setModalUsers(prev => prev.map(u =>
         u._id === targetUserId ? { ...u, isFollowing: !isCurrentlyFollowing } : u
-      ))
+      ));
 
-      await refreshUser() // Refresh the authenticated user's data
+      await refreshUser(); // Refresh the authenticated user's data
     } catch (error) {
-      console.error('Failed to toggle follow:', error)
+      console.error('Failed to toggle follow:', error);
       // TODO: Implement a toast notification for errors
     }
-  }
+  };
 
   // Fetch and open followers modal
   const openFollowersModal = async () => {
-    if (!user?._id) return
+    if (!user?._id) return;
 
-    setModalLoading(true)
-    setModalError(null)
-    setModalOpen('followers')
-    setSearchQuery('')
-    setModalUsers([]) // Clear previous users
+    setModalLoading(true);
+    setModalError(null);
+    setModalOpen('followers');
+    setSearchQuery('');
+    setModalUsers([]); // Clear previous users
 
     try {
-      if (!user.followers || user.followers.length === 0) {
-        return // No followers to fetch
+      // Ensure user.followers is an array before checking length
+      if (!user.followers || !Array.isArray(user.followers) || user.followers.length === 0) {
+        setModalLoading(false); // Make sure to set loading to false even if there are no followers
+        return; // No followers to fetch
       }
-      const res = await apiClient.getUsersByIds(user.followers)
-      let usersArr: ModalUser[] = []
-      if (res && typeof res === 'object' && Array.isArray((res as any).users)) {
-        usersArr = (res as any).users
+      const res = await apiClient.getUsersByIds(user.followers);
+      let usersArr: ModalUser[] = [];
+      if (res && typeof res === 'object' && 'users' in res && Array.isArray((res as any).users)) {
+        usersArr = (res as any).users;
       }
 
-      const usersWithFollowStatus = usersArr.map((u: any) => ({
+      const usersWithFollowStatus = usersArr.map((u: ModalUser) => ({ // Type u explicitly
         ...u,
         isFollowing: user.following?.includes(u._id) || false
-      }))
-      setModalUsers(usersWithFollowStatus)
-      setFollowingUsersSet(new Set(user.following || [])) // Initialize following set
+      }));
+      setModalUsers(usersWithFollowStatus);
+      setFollowingUsersSet(new Set(user.following || [])); // Initialize following set
     } catch (e) {
-      console.error('Failed to load followers:', e)
-      setModalError('Failed to load followers')
+      console.error('Failed to load followers:', e);
+      setModalError('Failed to load followers');
     } finally {
-      setModalLoading(false)
+      setModalLoading(false);
     }
-  }
+  };
 
   // Fetch and open following modal
   const openFollowingModal = async () => {
-    if (!user?._id) return
+    if (!user?._id) return;
 
-    setModalLoading(true)
-    setModalError(null)
-    setModalOpen('following')
-    setSearchQuery('')
-    setModalUsers([]) // Clear previous users
+    setModalLoading(true);
+    setModalError(null);
+    setModalOpen('following');
+    setSearchQuery('');
+    setModalUsers([]); // Clear previous users
 
     try {
-      if (!user.following || user.following.length === 0) {
-        return // No following to fetch
+      // Ensure user.following is an array before checking length
+      if (!user.following || !Array.isArray(user.following) || user.following.length === 0) {
+        setModalLoading(false); // Make sure to set loading to false even if there's no one being followed
+        return; // No following to fetch
       }
-      const res = await apiClient.getUsersByIds(user.following)
-      let usersArr: ModalUser[] = []
-      if (res && typeof res === 'object' && Array.isArray((res as any).users)) {
-        usersArr = (res as any).users
+      const res = await apiClient.getUsersByIds(user.following);
+      let usersArr: ModalUser[] = [];
+      if (res && typeof res === 'object' && 'users' in res && Array.isArray((res as any).users)) {
+        usersArr = (res as any).users;
       }
 
-      const usersWithFollowStatus = usersArr.map((u: any) => ({
+      const usersWithFollowStatus = usersArr.map((u: ModalUser) => ({ // Type u explicitly
         ...u,
         isFollowing: true // All users in following list are being followed
-      }))
-      setModalUsers(usersWithFollowStatus)
-      setFollowingUsersSet(new Set(user.following || [])) // Initialize following set
+      }));
+      setModalUsers(usersWithFollowStatus);
+      setFollowingUsersSet(new Set(user.following || [])); // Initialize following set
     } catch (e) {
-      console.error('Failed to load following:', e)
-      setModalError('Failed to load following')
+      console.error('Failed to load following:', e);
+      setModalError('Failed to load following');
     } finally {
-      setModalLoading(false)
+      setModalLoading(false);
     }
-  }
+  };
 
   // Close the modal and reset its state
   const closeModal = () => {
-    setModalOpen(null)
-    setSearchQuery('')
-    setModalUsers([])
-    setFilteredModalUsers([])
-    setModalError(null)
-  }
+    setModalOpen(null);
+    setSearchQuery('');
+    setModalUsers([]);
+    setFilteredModalUsers([]);
+    setModalError(null);
+  };
 
   return (
     <MainLayout>
@@ -335,7 +348,7 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {/* Enhanced Info Cards */}
                   <InfoCard
-                    icon={<User className="h-5 w-5" />}
+                    icon={<UserIcon className="h-5 w-5" />} // Use UserIcon here
                     title="Full Name"
                     value={
                       (user.firstName?.trim() && user.lastName?.trim())
@@ -581,11 +594,11 @@ export default function ProfilePage() {
                     onDelete={async (id: string) => {
                       if (window.confirm("Are you sure you want to delete this post? This action cannot be undone.")) {
                         try {
-                          await apiClient.deletePost(id)
-                          setPosts(prevPosts => prevPosts.filter(p => p._id !== id))
+                          await apiClient.deletePost(id);
+                          setPosts(prevPosts => prevPosts.filter(p => p._id !== id));
                         } catch (err) {
                           // TODO: Implement a toast notification for errors
-                          alert("Failed to delete post. Please try again.")
+                          alert("Failed to delete post. Please try again.");
                         }
                       }
                     }}
@@ -609,5 +622,5 @@ export default function ProfilePage() {
         </div>
       </main>
     </MainLayout>
-  )
+  );
 }

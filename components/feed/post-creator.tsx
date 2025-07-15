@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { ImageIcon, Video, ToggleLeft, ToggleRight, Smile, Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { useAuth } from "@/lib/hooks/use-auth.tsx"
+import { useAuth } from "@/lib/hooks/use-auth"
 import { apiClient } from "@/lib/api-client"
 import { useToast } from "@/hooks/use-toast"
 
@@ -22,6 +22,7 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
 
@@ -32,51 +33,46 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
   const isSunday = new Date().getDay() === 0
 
   const handlePost = async () => {
-    if (!postContent.trim()) return
-
-    setIsLoading(true)
-
+    if (!postContent.trim()) return;
+    setIsLoading(true);
     try {
       await apiClient.createPost({
         content: postContent.trim(),
-        imageURL: selectedImage || undefined,
+        imageFile: selectedImageFile || undefined,
         isAnonymous: isSunday ? isAnonymous : false,
-      })
-
+      });
       toast({
         title: "Post created!",
         description: "Your post has been shared successfully.",
-      })
-
-      // Reset form
-      setPostContent("")
-      setIsAnonymous(false)
-      setSelectedImage(null)
-      setIsDialogOpen(false)
-
-      // Notify parent to refresh posts
-      onPostCreated?.()
+      });
+      setPostContent("");
+      setIsAnonymous(false);
+      setSelectedImage(null);
+      setSelectedImageFile(null);
+      setIsDialogOpen(false);
+      onPostCreated?.();
     } catch (error) {
       toast({
         title: "Failed to create post",
         description: error instanceof Error ? error.message : "Something went wrong",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  }  
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader()
+      setSelectedImageFile(file);
+      const reader = new FileReader();
       reader.onload = (e) => {
-        setSelectedImage(e.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+        setSelectedImage(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
     }
-  }
+  }  
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -146,7 +142,7 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => setSelectedImage(null)}
+                        onClick={() => { setSelectedImage(null); setSelectedImageFile(null); }}
                         className="absolute top-2 right-2"
                         disabled={isLoading}
                       >
