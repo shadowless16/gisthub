@@ -1,8 +1,6 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,73 +17,166 @@ export default function SetupProfilePage() {
   const { user, refreshUser } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
+
+  // Initialize profileData with user's existing data if available
   const [profileData, setProfileData] = useState({
-    profilePicture: "",
-    bio: "",
-    instagram: "",
-    x: "",
-    github: "",
-    portfolio: "",
-    interests: "",
-    location: "",
+    profilePicture: user?.profilePic || "", // Pre-populate if user.profilePic exists
+    bio: user?.bio || "",
+    instagram: user?.socialLinks?.instagram || "",
+    x: user?.socialLinks?.x || "",
+    github: user?.socialLinks?.github || "",
+    portfolio: user?.socialLinks?.portfolio || "",
+    interests: user?.interests?.join(", ") || "", // Join array back to string for input
+    location: user?.location || "",
   })
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false) // State for loading
+
+  // Populate profileData when user data loads or changes
+  useEffect(() => {
+    if (user) {
+      setProfileData({
+        profilePicture: user.profilePic || "",
+        bio: user.bio || "",
+        instagram: user.socialLinks?.instagram || "",
+        x: user.socialLinks?.x || "",
+        github: user.socialLinks?.github || "",
+        portfolio: user.socialLinks?.portfolio || "",
+        interests: user.interests?.join(", ") || "",
+        location: user.location || "",
+      });
+    }
+  }, [user]); // Depend on user object
+
+
+  // Upload profile picture to backend and set URL
+  // This function now correctly accesses `setIsLoading` and `setProfileData`
+  const handleProfilePictureUpload = async (file: File) => {
+    setIsLoading(true)
+    try {
+      const formData = new FormData()
+      formData.append("profileImage", file) // 'profileImage' matches the backend's expected key
+
+      const res = await fetch("/api/upload-image", {
+        method: "POST",
+        body: formData, // FormData automatically sets 'Content-Type: multipart/form-data'
+      })
+
+      if (!res.ok) {
+        // Attempt to parse error message from backend
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error?.error || "Failed to upload image.");
+      }
+
+      const data = await res.json();
+      if (data?.imageUrl) {
+        setProfileData((prevData) => ({ ...prevData, profilePicture: data.imageUrl }));
+        toast({ title: "Profile picture uploaded!", description: "Image uploaded successfully." });
+      } else {
+        throw new Error("No image URL returned from server.");
+      }
+    } catch (err) {
+      toast({
+        title: "Image upload failed",
+        description: err instanceof Error ? err.message : "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    // Validate required fields
-    const requiredFields = ["profilePicture", "bio", "instagram", "x", "github", "portfolio", "interests", "location"]
+
+    const requiredFields = ["profilePicture", "bio", "interests", "location"]
     for (const field of requiredFields) {
-      if (!profileData[field as keyof typeof profileData] || (Array.isArray(profileData[field as keyof typeof profileData]) ? (profileData[field as keyof typeof profileData] as any).length === 0 : false)) {
-        toast({ title: "Missing field", description: `Please fill in your ${field}.`, variant: "destructive" })
+      const value = profileData[field as keyof typeof profileData];
+
+      // Check if value is falsy (empty string)
+      // For profilePicture, also check if it's a valid looking URL (starts with /uploads/ or http)
+      if (!value || (field === "profilePicture" && typeof value === 'string' && (!value.startsWith("/uploads/") && !value.startsWith("http")))) {
+        toast({
+          title: "Missing field",
+          description: `Please ${field === "profilePicture" ? "upload a profile picture" : `fill in your ${field}`}.`, // Improved message
+          variant: "destructive",
+        })
         setIsLoading(false)
         return
       }
+
+      // Special check for interests if it's supposed to be an array
+      if (field === "interests" && typeof value === 'string') {
+        const trimmedInterests = value.split(",").map(tag => tag.trim()).filter(Boolean);
+        if (trimmedInterests.length === 0) {
+          toast({
+            title: "Missing field",
+            description: "Please enter at least one interest.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
     }
+
     try {
-      // Update user profile
+      // Prepare interests array
+      const interestsArray = profileData.interests
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+
+      // Prepare social links object, ensuring empty strings are not sent as fields
+      const socialLinks = {
+        ...(profileData.instagram && { instagram: profileData.instagram }),
+        ...(profileData.x && { x: profileData.x }),
+        ...(profileData.github && { github: profileData.github }),
+        ...(profileData.portfolio && { portfolio: profileData.portfolio }),
+      }
+
       await fetch(`/api/users/${user?._id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          profilePic: profileData.profilePicture,
+          profilePic: profileData.profilePicture, // This will now be the URL
           bio: profileData.bio,
-          socialLinks: {
-            instagram: profileData.instagram,
-            x: profileData.x,
-            github: profileData.github,
-            portfolio: profileData.portfolio,
-          },
-          interests: profileData.interests.split(",").map(tag => tag.trim()),
+          socialLinks: socialLinks,
+          interests: interestsArray,
           location: profileData.location,
         }),
       })
+
       await refreshUser()
       toast({ title: "Profile updated!", description: "Your onboarding is complete." })
       router.push("/feed")
     } catch (err) {
-      toast({ title: "Failed to update profile", description: err instanceof Error ? err.message : "Something went wrong", variant: "destructive" })
+      console.error("Profile update failed:", err)
+      toast({
+        title: "Failed to update profile",
+        description: err instanceof Error ? err.message : "Something went wrong. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
   }
-
-  // Remove skip option (all fields required)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-vivid-teal/10 via-background to-sunset-orange/10 flex items-center justify-center p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center space-y-4">
           <CardTitle className="text-2xl">Complete Your Profile</CardTitle>
-          <CardDescription>Add a profile picture and bio to help others connect with you</CardDescription>
+          <CardDescription>
+            Add a profile picture and bio to help others connect with you
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="flex flex-col items-center space-y-4">
               <div className="relative">
                 <Avatar className="w-24 h-24">
-                  <AvatarImage src={profileData.profilePicture || "/placeholder.svg"} />
+                  <AvatarImage src={profileData.profilePicture || "/placeholder.svg"} alt="Profile Picture" />
                   <AvatarFallback className="text-lg">
                     <Camera className="w-8 h-8" />
                   </AvatarFallback>
@@ -99,20 +190,22 @@ export default function SetupProfilePage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     if (file) {
-                      const reader = new FileReader()
-                      reader.onload = (ev) => {
-                        setProfileData({ ...profileData, profilePicture: ev.target?.result as string })
-                      }
-                      reader.readAsDataURL(file)
+                      // Call the new upload handler directly
+                      handleProfilePictureUpload(file)
                     }
                   }}
                 />
-                <Label htmlFor="profilePicture" className="absolute -bottom-2 -right-2 w-8 h-8 flex items-center justify-center rounded-full bg-vivid-teal hover:bg-vivid-teal/90 cursor-pointer" style={{ zIndex: 1 }}>
-                  <Upload className="w-4 h-4" />
+                <Label
+                  htmlFor="profilePicture"
+                  className="absolute -bottom-2 -right-2 w-8 h-8 flex items-center justify-center rounded-full bg-vivid-teal hover:bg-vivid-teal/90 cursor-pointer"
+                  style={{ zIndex: 1 }}
+                >
+                  <Upload className="w-4 h-4 text-white" />
                 </Label>
               </div>
             </div>
 
+            {/* ... rest of your form fields ... */}
             <div className="space-y-2">
               <Label htmlFor="bio">Bio</Label>
               <Textarea
@@ -125,47 +218,43 @@ export default function SetupProfilePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="instagram">Instagram</Label>
+              <Label htmlFor="instagram">Instagram (optional)</Label>
               <Input
                 id="instagram"
                 type="text"
                 placeholder="Instagram username or link"
                 value={profileData.instagram}
                 onChange={(e) => setProfileData({ ...profileData, instagram: e.target.value })}
-                required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="x">X (Twitter)</Label>
+              <Label htmlFor="x">X (Twitter, optional)</Label>
               <Input
                 id="x"
                 type="text"
                 placeholder="X username or link"
                 value={profileData.x}
                 onChange={(e) => setProfileData({ ...profileData, x: e.target.value })}
-                required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="github">GitHub</Label>
+              <Label htmlFor="github">GitHub (optional)</Label>
               <Input
                 id="github"
                 type="text"
                 placeholder="GitHub username or link"
                 value={profileData.github}
                 onChange={(e) => setProfileData({ ...profileData, github: e.target.value })}
-                required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="portfolio">Portfolio</Label>
+              <Label htmlFor="portfolio">Portfolio (optional)</Label>
               <Input
                 id="portfolio"
                 type="text"
                 placeholder="Portfolio link"
                 value={profileData.portfolio}
                 onChange={(e) => setProfileData({ ...profileData, portfolio: e.target.value })}
-                required
               />
             </div>
             <div className="space-y-2">

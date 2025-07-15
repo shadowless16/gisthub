@@ -21,6 +21,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const testUser = await usersCollection.findOne({ _id: new ObjectId(id) })
     console.log("[PATCH USER] User found before update?", !!testUser, testUser)
 
+    // Cleaned: No debug logs for headers or raw body
+    const rawText = await request.clone().text()
+
     let body: any = {}
     let isFormData = false
     // Try to parse as FormData first (for file uploads)
@@ -47,9 +50,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     } catch {
       // If FormData fails, try JSON
       try {
-        body = await request.json()
+        body = JSON.parse(rawText)
       } catch {
-        return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+        return NextResponse.json({ error: "Invalid request body", debug: { rawText } }, { status: 400 })
       }
     }
 

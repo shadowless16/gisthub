@@ -1,3 +1,20 @@
+/**
+ * POST /api/auth/login
+ *
+ * Request body:
+ *   {
+ *     identifier: string, // email or username
+ *     password: string
+ *   }
+ *
+ * Response:
+ *   200 OK: { message, user, token }
+ *   400 Bad Request: { error }
+ *   401 Unauthorized: { error }
+ *   500 Internal Server Error: { error }
+ *
+ * Allows login with either email or username and password.
+ */
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { verifyPassword, generateToken } from "@/lib/auth"
@@ -6,17 +23,23 @@ import { sanitizeUser } from "@/lib/models/User"
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json()
 
-    if (!email || !password) {
-      return NextResponse.json({ error: "Email and password are required" }, { status: 400 })
+    const { identifier, password } = await request.json()
+
+    if (!identifier || !password) {
+      return NextResponse.json({ error: "Email/Username and password are required" }, { status: 400 })
     }
 
     const { db } = await connectToDatabase()
     const usersCollection = db.collection("users")
 
-    // Find user by email
-    const user = await usersCollection.findOne({ email })
+    // Find user by email or username
+    const user = await usersCollection.findOne({
+      $or: [
+        { email: identifier },
+        { username: identifier }
+      ]
+    })
 
     if (!user) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })

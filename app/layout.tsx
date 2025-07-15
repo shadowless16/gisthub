@@ -5,6 +5,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { AuthProvider } from "@/lib/hooks/use-auth"
 import { Toaster } from "@/components/ui/toaster"
+import { EnforceProfileCompletion } from "@/components/enforce-profile-completion"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
+            <EnforceProfileCompletion />
             {children}
             <Toaster />
           </AuthProvider>

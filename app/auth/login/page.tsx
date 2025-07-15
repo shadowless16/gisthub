@@ -10,13 +10,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
-import { useAuth } from "@/lib/hooks/use-auth.tsx"
+import { useAuth } from "@/lib/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
-    email: "",
+    identifier: "",
     password: "",
   })
   const [isLoading, setIsLoading] = useState(false)
@@ -30,7 +30,7 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      await login(formData.email, formData.password)
+      await login(formData.identifier, formData.password)
       toast({
         title: "Welcome back!",
         description: "You have successfully logged in.",
@@ -61,13 +61,13 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="identifier">Email or Username</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="student@university.edu"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                id="identifier"
+                type="text"
+                placeholder="Email or Username"
+                value={formData.identifier}
+                onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                 required
                 disabled={isLoading}
               />

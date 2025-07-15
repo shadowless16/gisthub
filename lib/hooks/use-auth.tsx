@@ -36,7 +36,7 @@ interface User {
 interface AuthContextType {
   user: User | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (identifier: string, password: string) => Promise<void>
   register: (data: {
     username: string
     email: string
@@ -67,8 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   type LoginResponse = { user: User; token: string }
-  const login = async (email: string, password: string) => {
-    const response = (await apiClient.login({ email, password })) as LoginResponse
+  const login = async (identifier: string, password: string) => {
+    const response = (await apiClient.login({ identifier, password })) as LoginResponse
     setUser(response.user)
     if (response.token) {
       // Set cookie for server-side middleware

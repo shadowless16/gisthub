@@ -103,7 +103,7 @@ class ApiClient {
     return data
   }
 
-  async login(credentials: { email: string; password: string }) {
+  async login(credentials: { identifier: string; password: string }) {
     const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
