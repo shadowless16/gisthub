@@ -1,71 +1,63 @@
-import { useEffect, useState, useRef } from "react"
-import { StoryViewerModal } from "./story-viewer-modal"
-import { apiClient } from "@/lib/api-client"
-import { useAuth } from "@/lib/hooks/use-auth"
-import { Button } from "@/components/ui/button"
-import { Plus, Camera, X, Image as ImageIcon, Type, Palette, StopCircle } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useEffect, useState, useRef } from "react";
+import { useStories } from "./stories-context";
+import { StoryViewerModal } from "./story-viewer-modal"; // Assuming this path is correct relative to stories-section.tsx
+import { apiClient } from "@/lib/api-client";
+import { useAuth } from "@/lib/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import {
+  Plus,
+  Camera,
+  X,
+  Image as ImageIcon,
+  Type,
+  Palette,
+  StopCircle,
+} from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-// Define a comprehensive Story interface, assuming this is the primary definition.
-// If Story is defined elsewhere with more properties, consolidate them here.
-interface Story {
-  _id: string;
-  userId: string;
-  imageUrl?: string;
-  text?: string;
-  caption?: string;
-  backgroundColor?: string;
-  textColor?: string;
-  createdAt: string;
-  expiresAt: string;
-  user?: {
-    username: string;
-    profilePic?: string;
-  };
-  // Properties identified as missing from image_070167.png error:
-  views: number;
-  likes: number;
-  replies: number;
-  shares: number;
-}
+// Import the shared Story interface from the central types file
+import { Story } from "@/types/story"; // Adjust path if needed
 
-// Interface for the API response from getStories
-interface GetStoriesResponse {
-  stories: Story[];
-}
+// Remove interface GetStoriesResponse if it's not explicitly needed elsewhere
+// The type for the response is already handled in stories-context.tsx
 
 export function StoriesSection() {
-  const { user } = useAuth()
-  const [stories, setStories] = useState<Story[]>([])
-  const [loading, setLoading] = useState(true)
-  const [viewerOpen, setViewerOpen] = useState(false)
-  const [activeStoryIdx, setActiveStoryIdx] = useState<number | null>(null)
-  const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [selectedImage, setSelectedImage] = useState<string | null>(null)
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
-  const [storyType, setStoryType] = useState<'camera' | 'text' | 'image'>('camera')
-  const [textColor, setTextColor] = useState('#FFFFFF')
-  const [backgroundColor, setBackground] = useState('linear-gradient(135deg, #667eea 0%, #764ba2 100%)')
-  const [caption, setCaption] = useState('')
-  const [storyText, setStoryText] = useState('')
-  const [isUploading, setIsUploading] = useState(false)
+  const { user } = useAuth();
+  const { stories, loading, error, refreshStories } = useStories();
+
+  // State declarations
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [activeStoryIdx, setActiveStoryIdx] = useState<number | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [storyType, setStoryType] = useState<"camera" | "text" | "image">(
+    "camera"
+  );
+  const [textColor, setTextColor] = useState("#FFFFFF");
+  const [backgroundColor, setBackground] = useState(
+    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+  );
+  const [caption, setCaption] = useState("");
+  const [storyText, setStoryText] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
   // Camera states
-  const [isCameraOpen, setIsCameraOpen] = useState(false)
-  const [stream, setStream] = useState<MediaStream | null>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const gradientBackgrounds = [
-    'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-    'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-    'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-    'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-    'linear-gradient(135deg, #30cfd0 0%, #91a7ff 100%)',
-    'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-    'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)'
-  ]
+    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+    "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+    "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+    "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
+    "linear-gradient(135deg, #30cfd0 0%, #91a7ff 100%)",
+    "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
+    "linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)",
+  ];
 
   useEffect(() => {
     if (viewerOpen || createModalOpen) {
@@ -78,29 +70,11 @@ export function StoriesSection() {
     };
   }, [viewerOpen, createModalOpen]);
 
-  useEffect(() => {
-    const fetchStories = async () => {
-      setLoading(true);
-      try {
-        // Explicitly type the response from apiClient.getStories()
-        const response = await apiClient.getStories() as GetStoriesResponse;
-        setStories(response.stories || []);
-        console.log("Fetched Stories:", response.stories);
-      } catch (err) {
-        setStories([]);
-        console.error("Error fetching stories:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchStories();
-  }, [])
-
   // Camera functions
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' }
+        video: { facingMode: "user" },
       });
       setStream(mediaStream);
       setIsCameraOpen(true);
@@ -109,14 +83,14 @@ export function StoriesSection() {
         videoRef.current.srcObject = mediaStream;
       }
     } catch (error) {
-      console.error('Error accessing camera:', error);
-      alert('Could not access camera. Please check permissions.');
+      console.error("Error accessing camera:", error);
+      alert("Could not access camera. Please check permissions.");
     }
   };
 
   const stopCamera = () => {
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((track) => track.stop());
       setStream(null);
     }
     setIsCameraOpen(false);
@@ -126,16 +100,16 @@ export function StoriesSection() {
     if (videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const video = videoRef.current;
-      const context = canvas.getContext('2d');
+      const context = canvas.getContext("2d");
 
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
       if (context) {
-        context.drawImage(video, 0, 0, canvas.width, canvas.height); // Added width and height for consistency
-        const imageData = canvas.toDataURL('image/jpeg');
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = canvas.toDataURL("image/jpeg");
         setSelectedImage(imageData);
-        setStoryType('image');
+        setStoryType("image");
         stopCamera();
       }
     }
@@ -148,7 +122,7 @@ export function StoriesSection() {
       const reader = new FileReader();
       reader.onload = (e) => {
         setSelectedImage(e.target?.result as string);
-        setStoryType('image');
+        setStoryType("image");
       };
       reader.readAsDataURL(file);
     }
@@ -157,11 +131,11 @@ export function StoriesSection() {
   const resetModal = () => {
     setSelectedImage(null);
     setSelectedImageFile(null);
-    setStoryType('camera');
-    setTextColor('#FFFFFF');
-    setBackground('linear-gradient(135deg, #667eea 0%, #764ba2 100%)');
-    setCaption('');
-    setStoryText('');
+    setStoryType("camera");
+    setTextColor("#FFFFFF");
+    setBackground("linear-gradient(135deg, #667eea 0%, #764ba2 100%)");
+    setCaption("");
+    setStoryText("");
     stopCamera();
   };
 
@@ -170,46 +144,38 @@ export function StoriesSection() {
     setIsUploading(true);
 
     try {
-      let storyData: any = {}; // Keep as 'any' for now, or define specific types for each storyType case
+      let storyData: any = {}; 
 
-      if (storyType === 'text') {
+      if (storyType === "text") {
         if (!storyText.trim()) {
-          alert('Please enter some text for your story');
-          setIsUploading(false); // Ensure uploading state is reset on early exit
+          alert("Please enter some text for your story");
+          setIsUploading(false);
           return;
         }
         storyData = {
           text: storyText,
           backgroundColor,
-          textColor
+          textColor,
         };
-      } else if (storyType === 'image' && selectedImageFile) {
+      } else if (storyType === "image" && selectedImageFile) {
         storyData = {
           image: selectedImageFile,
-          caption: caption.trim() || undefined
+          caption: caption.trim() || undefined,
         };
       } else {
-        alert('No story content to share!'); // Handle case where no content is ready
+        alert("No story content to share!");
         setIsUploading(false);
         return;
       }
 
       await apiClient.createStory(storyData);
+      await refreshStories();
 
-      // Refresh stories
-      setLoading(true);
-      // Explicitly type the response from apiClient.getStories()
-      const updatedResponse = await apiClient.getStories() as GetStoriesResponse;
-      setStories(updatedResponse.stories || []);
-      setLoading(false);
-
-      // Reset and close modal
       resetModal();
       setCreateModalOpen(false);
-
     } catch (error) {
-      console.error('Error creating story:', error);
-      alert('Failed to create story. Please try again.');
+      console.error("Error creating story:", error);
+      alert("Failed to create story. Please try again.");
     } finally {
       setIsUploading(false);
     }
@@ -266,7 +232,10 @@ export function StoriesSection() {
                 <div className="w-full h-full rounded-full bg-white p-0.5">
                   {story.imageUrl ? (
                     <Avatar className="w-full h-full">
-                      <AvatarImage src={story.imageUrl} className="object-cover" />
+                      <AvatarImage
+                        src={story.imageUrl}
+                        className="object-cover"
+                      />
                       <AvatarFallback className="bg-muted text-muted-foreground">
                         {story.user?.username
                           ? story.user.username.split(" ").map((n) => n[0]).join("")
@@ -277,8 +246,8 @@ export function StoriesSection() {
                     <div
                       className="w-full h-full flex items-center justify-center rounded-full text-xs font-medium text-center p-1"
                       style={{
-                        background: story.backgroundColor || '#f3f4f6',
-                        color: story.textColor || '#000000'
+                        background: story.backgroundColor || "#f3f4f6",
+                        color: story.textColor || "#000000",
                       }}
                     >
                       {story.text?.slice(0, 10) || "Story"}
@@ -301,7 +270,9 @@ export function StoriesSection() {
           <div className="bg-white rounded-xl shadow-2xl w-96 max-w-sm mx-4 overflow-hidden max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">Create Story</h3>
+              <h3 className="text-lg font-semibold text-gray-800">
+                Create Story
+              </h3>
               <button
                 onClick={() => {
                   setCreateModalOpen(false);
@@ -316,33 +287,33 @@ export function StoriesSection() {
             {/* Story Type Selection */}
             <div className="flex border-b border-gray-200">
               <button
-                onClick={() => setStoryType('camera')}
+                onClick={() => setStoryType("camera")}
                 className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
-                  storyType === 'camera'
-                    ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
+                  storyType === "camera"
+                    ? "text-blue-600 bg-blue-50 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-800"
                 }`}
               >
                 <Camera className="w-4 h-4 mx-auto mb-1" />
                 Camera
               </button>
               <button
-                onClick={() => setStoryType('text')}
+                onClick={() => setStoryType("text")}
                 className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
-                  storyType === 'text'
-                    ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
+                  storyType === "text"
+                    ? "text-blue-600 bg-blue-50 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-800"
                 }`}
               >
                 <Type className="w-4 h-4 mx-auto mb-1" />
                 Text
               </button>
               <button
-                onClick={() => setStoryType('image')}
+                onClick={() => setStoryType("image")}
                 className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
-                  storyType === 'image'
-                    ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
+                  storyType === "image"
+                    ? "text-blue-600 bg-blue-50 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-800"
                 }`}
               >
                 <ImageIcon className="w-4 h-4 mx-auto mb-1" />
@@ -353,7 +324,7 @@ export function StoriesSection() {
             {/* Story Content */}
             <div className="p-4">
               {/* Camera Section */}
-              {storyType === 'camera' && (
+              {storyType === "camera" && (
                 <div className="space-y-4">
                   {!isCameraOpen && !selectedImage && (
                     <div className="text-center">
@@ -399,7 +370,8 @@ export function StoriesSection() {
               )}
 
               {/* Image Preview and Caption */}
-              {(storyType === 'image' || (storyType === 'camera' && selectedImage)) && (
+              {(storyType === "image" ||
+                (storyType === "camera" && selectedImage)) && (
                 <div className="space-y-4">
                   {selectedImage && (
                     <div className="w-full h-64 rounded-lg overflow-hidden">
@@ -411,7 +383,7 @@ export function StoriesSection() {
                     </div>
                   )}
 
-                  {!selectedImage && storyType === 'image' && (
+                  {!selectedImage && storyType === "image" && (
                     <div>
                       <input
                         type="file"
@@ -425,7 +397,9 @@ export function StoriesSection() {
                         className="block w-full p-6 text-center bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
                       >
                         <ImageIcon className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                        <span className="text-sm text-gray-600">Choose Photo</span>
+                        <span className="text-sm text-gray-600">
+                          Choose Photo
+                        </span>
                       </label>
                     </div>
                   )}
@@ -440,13 +414,15 @@ export function StoriesSection() {
                       className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       maxLength={100}
                     />
-                    <div className="text-xs text-gray-500 mt-1">{caption.length}/100 characters</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {caption.length}/100 characters
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* Text Story */}
-              {storyType === 'text' && (
+              {storyType === "text" && (
                 <div className="space-y-4">
                   <div
                     className="w-full h-64 rounded-lg flex items-center justify-center p-6"
@@ -469,7 +445,9 @@ export function StoriesSection() {
                       rows={3}
                       maxLength={120}
                     />
-                    <div className="text-xs text-gray-500 mt-1">{storyText.length}/120 characters</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {storyText.length}/120 characters
+                    </div>
                   </div>
 
                   <div>
@@ -482,7 +460,9 @@ export function StoriesSection() {
                           key={idx}
                           onClick={() => setBackground(bg)}
                           className={`w-8 h-8 rounded-full flex-shrink-0 border-2 ${
-                            backgroundColor === bg ? 'border-blue-500' : 'border-gray-300'
+                            backgroundColor === bg
+                              ? "border-blue-500"
+                              : "border-gray-300"
                           }`}
                           style={{ background: bg }}
                         />
@@ -495,12 +475,21 @@ export function StoriesSection() {
                       Text Color
                     </label>
                     <div className="flex space-x-2">
-                      {['#FFFFFF', '#000000', '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A'].map((color) => (
+                      {[
+                        "#FFFFFF",
+                        "#000000",
+                        "#FF6B6B",
+                        "#4ECDC4",
+                        "#45B7D1",
+                        "#FFA07A",
+                      ].map((color) => (
                         <button
                           key={color}
                           onClick={() => setTextColor(color)}
                           className={`w-8 h-8 rounded-full border-2 ${
-                            textColor === color ? 'border-blue-500' : 'border-gray-300'
+                            textColor === color
+                              ? "border-blue-500"
+                              : "border-gray-300"
                           }`}
                           style={{ backgroundColor: color }}
                         />
@@ -525,10 +514,10 @@ export function StoriesSection() {
                 </button>
                 <button
                   onClick={handleCreateStory}
-                  disabled={isUploading || (!storyText && !selectedImage)}
+                  disabled={isUploading || (!storyText && !selectedImageFile)} // Corrected condition: use selectedImageFile
                   className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isUploading ? 'Sharing...' : 'Share Story'}
+                  {isUploading ? "Sharing..." : "Share Story"}
                 </button>
               </div>
             </div>
@@ -540,23 +529,44 @@ export function StoriesSection() {
         open={viewerOpen}
         onClose={() => setViewerOpen(false)}
         story={activeStoryIdx !== null ? stories[activeStoryIdx] : null}
-        onNext={() => setActiveStoryIdx((idx) => (idx !== null && idx < stories.length - 1 ? idx + 1 : 0))}
-        onPrev={() => setActiveStoryIdx((idx) => (idx !== null && idx > 0 ? idx - 1 : stories.length - 1))}
+        stories={stories} // Pass the full stories array
+        currentIndex={activeStoryIdx !== null ? activeStoryIdx : 0} // Pass the current index
+        onNext={() =>
+          setActiveStoryIdx((idx) => {
+            if (idx === null) return null;
+            return idx < stories.length - 1 ? idx + 1 : 0; // Loop back to start
+          })
+        }
+        onPrev={() =>
+          setActiveStoryIdx((idx) => {
+            if (idx === null) return null;
+            return idx > 0 ? idx - 1 : stories.length - 1; // Loop to end
+          })
+        }
         onDelete={async () => {
           if (activeStoryIdx === null) return;
-          const story = stories[activeStoryIdx];
-          if (user && story.userId === user._id) {
-            await apiClient.deleteStory(story._id);
-            const updated = stories.filter((_, i) => i !== activeStoryIdx);
-            setStories(updated);
-            if (updated.length === 0) setViewerOpen(false);
-            else setActiveStoryIdx((idx) => (idx && idx >= updated.length ? updated.length - 1 : idx));
+          const storyToDelete = stories[activeStoryIdx];
+          if (user && storyToDelete.userId === user._id) {
+            await apiClient.deleteStory(storyToDelete._id);
+            await refreshStories(); 
+            // After deleting, decide what to show next
+            // If it was the last story, close. Otherwise, try to stay on the next available story.
+            const newStoriesCount = stories.length - 1;
+            if (newStoriesCount === 0) {
+                setViewerOpen(false);
+                setActiveStoryIdx(null); // No stories left
+            } else if (activeStoryIdx >= newStoriesCount) {
+                setActiveStoryIdx(newStoriesCount - 1); // If last story deleted, go to new last
+            }
+            // If a middle story was deleted, activeStoryIdx will still point to the correct next story
           }
         }}
-        // Fix for Type 'boolean | null' is not assignable to type 'boolean | undefined'.
-        // Explicitly cast to boolean, which results in boolean | undefined if `activeStoryIdx` is null.
-        canDelete={activeStoryIdx !== null && user && stories[activeStoryIdx]?.userId === user._id ? true : undefined}
+        canDelete={
+          activeStoryIdx !== null && user && stories[activeStoryIdx]?.userId === user._id
+            ? true
+            : false // Explicitly boolean
+        }
       />
     </>
-  )
+  );
 }

@@ -263,9 +263,10 @@ class ApiClient {
   }
 
   // Comment methods
-  async getComments(postId: string) {
-    const response = await fetch(`/api/comments?postId=${postId}`)
-    return this.handleResponse(response)
+
+  async getCommentsBatch(postIds: string) {
+    const response = await fetch(`/api/comments?postIds=${postIds}`);
+    return this.handleResponse(response);
   }
 
   async addComment({ postId, userId, content, parentId, imageFile }: { postId: string, userId: string, content: string, parentId?: string, imageFile?: File }) {

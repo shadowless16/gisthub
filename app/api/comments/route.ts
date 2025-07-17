@@ -7,35 +7,55 @@ import { type Comment, sanitizeComment } from "@/lib/models/Comment";
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const postId = searchParams.get("postId");
-  if (!postId || !ObjectId.isValid(postId)) {
-    return NextResponse.json({ error: "Invalid postId" }, { status: 400 });
+  const postIdsParam = searchParams.get("postIds");
+  let postIds: ObjectId[] = [];
+  if (postIdsParam) {
+    postIds = postIdsParam.split(",").filter(id => ObjectId.isValid(id)).map(id => new ObjectId(id));
+    if (postIds.length === 0) {
+      return NextResponse.json({ error: "Invalid postIds" }, { status: 400 });
+    }
+  } else if (postId && ObjectId.isValid(postId)) {
+    postIds = [new ObjectId(postId)];
+  } else {
+    return NextResponse.json({ error: "Invalid postId(s)" }, { status: 400 });
   }
+
   const { db } = await connectToDatabase();
   const commentsCollection = db.collection<Comment>("comments");
   const usersCollection = db.collection("users");
 
-  // Fetch all comments for the post
-  const comments = await commentsCollection.find({ postId: new ObjectId(postId) }).sort({ createdAt: 1 }).toArray();
+  // Fetch all comments for the given postIds
+  const comments = await commentsCollection.find({ postId: { $in: postIds } }).sort({ createdAt: 1 }).toArray();
   // Fetch all users for these comments
   const userIds = [...new Set(comments.map(c => c.userId.toString()))];
   const users = await usersCollection.find({ _id: { $in: userIds.map(id => new ObjectId(id)) } }).toArray();
   const userMap = Object.fromEntries(users.map(u => [u._id.toString(), { username: u.username, profilePic: u.profilePic }]));
 
-  // Build nested replies
+  // Build nested replies for each postId
   const commentMap: Record<string, any> = {};
   comments.forEach(c => { commentMap[c._id!.toString()] = { ...c, replies: [] }; });
-  const roots: any[] = [];
+  const rootsByPost: Record<string, any[]> = {};
+  postIds.forEach(id => { rootsByPost[id.toString()] = []; });
   comments.forEach(c => {
     if (c.parentId) {
       commentMap[c.parentId.toString()].replies.push(commentMap[c._id!.toString()]);
     } else {
-      roots.push(commentMap[c._id!.toString()]);
+      rootsByPost[c.postId.toString()].push(commentMap[c._id!.toString()]);
     }
   });
   function toResponse(c: any): any {
     return sanitizeComment(c, userMap[c.userId.toString()], c.replies.map(toResponse));
   }
-  return NextResponse.json({ comments: roots.map(toResponse) });
+  // If only one postId, keep old response shape for compatibility
+  if (postIds.length === 1) {
+    return NextResponse.json({ comments: rootsByPost[postIds[0].toString()].map(toResponse) });
+  }
+  // Otherwise, return a map of postId -> comments
+  const result: Record<string, any[]> = {};
+  for (const id of postIds) {
+    result[id.toString()] = rootsByPost[id.toString()].map(toResponse);
+  }
+  return NextResponse.json({ commentsByPost: result });
 }
 
 // POST /api/comments

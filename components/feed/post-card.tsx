@@ -75,32 +75,17 @@ const useLike = (post: Post, onUpdate?: (id: string) => void) => {
   return { isLiked, likesCount, isLiking, handleLike }
 }
 
-// Custom hook for managing comments
-const useComments = (postId: string) => {
-  const [comments, setComments] = useState<CommentType[]>([])
-  const [commentsLoading, setCommentsLoading] = useState(false)
-  const { user } = useAuth()
 
-  const fetchComments = async (): Promise<void> => {
-    setCommentsLoading(true)
-    try {
-      const response = await apiClient.getComments(postId) as any
-      setComments(response.comments || [])
-    } catch {
-      setComments([])
-    } finally {
-      setCommentsLoading(false)
-    }
-  }
-
+// AddComment hook for single post
+const useAddComment = (postId: string, onCommentAdded: () => void) => {
+  const { user } = useAuth();
   const addComment = async (content: string, parentId?: string, imageFile?: File) => {
-    if (!user?._id || !content.trim()) return
-    await apiClient.addComment({ postId, userId: user._id, content, parentId, imageFile })
-    await fetchComments()
-  }
-
-  return { comments, commentsLoading, fetchComments, addComment }
-}
+    if (!user?._id || !content.trim()) return;
+    await apiClient.addComment({ postId, userId: user._id, content, parentId, imageFile });
+    onCommentAdded();
+  };
+  return { addComment };
+};
 
 // Reusable Comment Input Component
 interface CommentInputProps {
@@ -292,17 +277,13 @@ interface PostCardProps {
   className?: string;
   onProfileClick?: () => void;
 }
-export function PostCard({ post, onUpdate, onDelete, className, onProfileClick }: PostCardProps) {
-  const { user } = useAuth()
-  const { toast } = useToast()
-  const [showReplies, setShowReplies] = useState(false)
-  
-  const { isLiked, likesCount, isLiking, handleLike } = useLike(post, onUpdate)
-  const { comments, commentsLoading, fetchComments, addComment } = useComments(post._id)
 
-  useEffect(() => {
-    if (showReplies) fetchComments()
-  }, [showReplies])
+export function PostCard({ post, comments, commentsLoading, onUpdate, onDelete, className, onProfileClick }: PostCardProps & { comments: any[], commentsLoading: boolean }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [showReplies, setShowReplies] = useState(false);
+  const { isLiked, likesCount, isLiking, handleLike } = useLike(post, onUpdate);
+  const { addComment } = useAddComment(post._id, () => {/* Optionally refetch comments batch in parent */});
 
   const handleDelete = async () => {
     if (!window.confirm("Are you sure you want to delete this post?")) return
@@ -444,7 +425,7 @@ export function PostCard({ post, onUpdate, onDelete, className, onProfileClick }
                     onSubmit={(content, imageFile) => addComment(content, undefined, imageFile)}
                     placeholder="Write a comment..."
                   />
-                  {commentsLoading ? (
+              {commentsLoading ? (
                     <div className="text-center text-xs sm:text-sm text-muted-foreground py-4">
                       Loading comments...
                     </div>

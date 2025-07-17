@@ -1,24 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react"; // Added useCallback
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { CustomModal } from "@/components/ui/custom-modal";
-import { Heart, MessageCircle, Send, MoreHorizontal, X, Volume2, VolumeX, Eye, Users, TrendingUp, ChevronUp, Share2 } from "lucide-react";
+import { CustomModal } from "@/components/ui/custom-modal"; // Not used in this snippet, but kept if you have it
+import { Heart, MessageCircle, Send, MoreHorizontal, X, Volume2, VolumeX, Eye, Users, TrendingUp, ChevronUp, Share2, Trash2 } from "lucide-react";
 
-interface Story {
-  _id: string;
-  userId: string;
-  imageUrl?: string;
-  text?: string;
-  createdAt: string;
-  expiresAt: string;
-  views: number;
-  likes: number;
-  replies: number;
-  shares: number;
-  user?: {
-    username: string;
-    profilePic?: string;
-  };
-}
+import { Story } from "@/types/story"; // Import the shared Story interface
 
 interface StoryViewerModalProps {
   open: boolean;
@@ -28,8 +13,8 @@ interface StoryViewerModalProps {
   onPrev?: () => void;
   onDelete?: () => void;
   canDelete?: boolean;
-  stories?: Story[];
-  currentIndex?: number;
+  stories?: Story[]; // Ensure this is present and used for progress bars
+  currentIndex?: number; // Ensure this is present and used for progress bars
 }
 
 export function StoryViewerModal({ 
@@ -40,8 +25,8 @@ export function StoryViewerModal({
   onPrev, 
   onDelete, 
   canDelete,
-  stories = [],
-  currentIndex = 0
+  stories = [], // Default to empty array
+  currentIndex = 0 // Default to 0
 }: StoryViewerModalProps) {
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -49,52 +34,59 @@ export function StoryViewerModal({
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [replyText, setReplyText] = useState("");
-  const [isLiked, setIsLiked] = useState(false);
+  const [isLiked, setIsLiked] = useState(false); // Assuming initial state is not liked
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [swipeY, setSwipeY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const touchStartY = useRef(0);
   const touchStartX = useRef(0);
 
-  // Auto-progress story every 6 seconds (cinematic timing)
-  useEffect(() => {
-    if (!open || isPaused || showAnalytics) return;
-    
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          handleNext();
-          return 0;
-        }
-        return prev + 1.67; // Progress 1.67% every 100ms (6 seconds total)
-      });
-    }, 100);
-
-    return () => clearInterval(interval);
-  }, [open, isPaused, showAnalytics]);
-
-  // Reset progress when story changes
-  useEffect(() => {
-    setProgress(0);
-  }, [story?._id]);
-
-  const handleNext = () => {
+  // Memoize handleNext and handlePrev to prevent re-creation on every render
+  const handleNext = useCallback(() => {
     if (isTransitioning) return;
     setIsTransitioning(true);
     setTimeout(() => {
       onNext?.();
       setIsTransitioning(false);
     }, 300);
-  };
+  }, [isTransitioning, onNext]);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (isTransitioning) return;
     setIsTransitioning(true);
     setTimeout(() => {
       onPrev?.();
       setIsTransitioning(false);
     }, 300);
-  };
+  }, [isTransitioning, onPrev]);
+
+  // Auto-progress story every 6 seconds (cinematic timing)
+  useEffect(() => {
+    if (!open || isPaused || showAnalytics) return;
+    
+    // Reset progress to 0 when opening or changing story if not paused
+    if (progress === 0 && !isPaused && !showAnalytics) {
+        setProgress(0);
+    }
+
+    const interval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 100) {
+          handleNext();
+          return 0; // Reset progress for the next story
+        }
+        return prev + (100 / 60); // Progress 1.67% every 100ms (6 seconds total: 100% / 6 seconds = 16.66% per second; 1.66% per 100ms)
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [open, isPaused, showAnalytics, handleNext, story?._id]); // Added story?._id to dependencies
+
+  // Reset progress when story changes
+  useEffect(() => {
+    setProgress(0);
+    setIsLiked(false); // Reset like state for new story
+  }, [story?._id]);
 
   const handleStoryClick = (e: React.MouseEvent) => {
     if (showAnalytics) return;
@@ -115,6 +107,7 @@ export function StoryViewerModal({
     touchStartY.current = e.touches[0].clientY;
     touchStartX.current = e.touches[0].clientX;
     setIsDragging(true);
+    setIsPaused(true); // Pause story when dragging starts
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -123,15 +116,18 @@ export function StoryViewerModal({
     const currentY = e.touches[0].clientY;
     const deltaY = currentY - touchStartY.current;
     
-    if (Math.abs(deltaY) > 10) {
+    const currentX = e.touches[0].clientX;
+    const deltaX = currentX - touchStartX.current;
+
+    // Prioritize vertical swipe for closing/analytics, horizontal for next/prev
+    if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) {
       setSwipeY(deltaY);
-      setIsPaused(true);
     }
   };
 
   const handleTouchEnd = () => {
     setIsDragging(false);
-    setIsPaused(false);
+    setIsPaused(false); // Resume story when dragging ends
     
     if (swipeY > 100) {
       // Swipe down to close
@@ -141,25 +137,47 @@ export function StoryViewerModal({
       setShowAnalytics(true);
     }
     
-    setSwipeY(0);
+    setSwipeY(0); // Reset swipe position
   };
 
   const timeAgo = (date: string) => {
     const now = new Date();
     const storyDate = new Date(date);
     const diff = now.getTime() - storyDate.getTime();
-    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    const months = Math.floor(days / 30);
+    const years = Math.floor(days / 365);
     
-    if (hours < 1) return "now";
-    if (hours < 24) return `${hours}h`;
-    return `${Math.floor(hours / 24)}d`;
+    if (seconds < 60) return `${seconds}s ago`;
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 30) return `${days}d ago`;
+    if (months < 12) return `${months}mo ago`;
+    return `${years}y ago`;
   };
 
-  const formatNumber = (num: number) => {
+  const formatNumber = (num: number | undefined) => {
     if (typeof num !== 'number' || isNaN(num)) return '0';
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
     return num.toString();
+  };
+
+  const handleLike = () => {
+    setIsLiked(!isLiked);
+    // In a real app, you'd send an API call here to update the like count
+  };
+
+  const handleSendReply = () => {
+    if (replyText.trim()) {
+      console.log("Sending reply:", replyText);
+      setReplyText("");
+      setShowReplyInput(false);
+      // In a real app, you'd send an API call here
+    }
   };
 
   if (!story) return null;
@@ -246,169 +264,141 @@ export function StoryViewerModal({
                 className="w-full h-full object-cover"
                 draggable={false}
               />
-              {story.text && (
+              {story.caption && ( // Changed from story.text to story.caption for image stories
                 <div className="absolute bottom-24 left-0 w-full flex justify-center pointer-events-none z-40">
                   <div className="backdrop-blur-md bg-black/40 rounded-2xl px-6 py-4 max-w-md w-full mx-4 text-center">
                     <p className="text-white text-lg font-medium leading-relaxed drop-shadow-2xl">
-                      {story.text}
+                      {story.caption}
                     </p>
                   </div>
                 </div>
               )}
             </>
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-orange-600 flex items-center justify-center">
-              <div className="text-center px-8">
-                <div className="text-white text-8xl mb-6 animate-pulse">✨</div>
-                <div className="text-white text-3xl font-bold mb-4 drop-shadow-lg">Text Story</div>
-                <div className="w-16 h-1 bg-white/50 rounded-full mx-auto"></div>
+            <div 
+              className="w-full h-full flex items-center justify-center p-8"
+              style={{ background: story.backgroundColor || "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }}
+            >
+              <div className="text-center">
+                <p 
+                  className="text-3xl font-bold leading-tight drop-shadow-lg"
+                  style={{ color: story.textColor || "#FFFFFF" }}
+                >
+                  {story.text || "No text content"}
+                </p>
               </div>
             </div>
           )}
-          
-          {/* Navigation Zones */}
-          <div className="absolute left-0 top-0 w-1/3 h-full" />
-          <div className="absolute right-0 top-0 w-1/3 h-full" />
-        </div>
 
-        {/* Analytics Panel */}
-        {showAnalytics && (
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/95 to-transparent p-6 transform transition-all duration-300 ease-out">
-            <div className="max-w-md mx-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-white text-xl font-bold">Story Analytics</h3>
-                <button
-                  onClick={() => setShowAnalytics(false)}
-                  className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-                >
-                  <ChevronUp size={20} className="text-white" />
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-xl p-4 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Eye size={16} className="text-blue-400" />
-                    <span className="text-white/80 text-sm">Views</span>
-                  </div>
-                  <div className="text-white text-2xl font-bold">{formatNumber(story.views)}</div>
-                </div>
-                
-                <div className="bg-gradient-to-br from-pink-500/20 to-red-500/20 rounded-xl p-4 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Heart size={16} className="text-pink-400" />
-                    <span className="text-white/80 text-sm">Likes</span>
-                  </div>
-                  <div className="text-white text-2xl font-bold">{formatNumber(story.likes)}</div>
-                </div>
-                
-                <div className="bg-gradient-to-br from-green-500/20 to-teal-500/20 rounded-xl p-4 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <MessageCircle size={16} className="text-green-400" />
-                    <span className="text-white/80 text-sm">Replies</span>
-                  </div>
-                  <div className="text-white text-2xl font-bold">{formatNumber(story.replies)}</div>
-                </div>
-                
-                <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 rounded-xl p-4 backdrop-blur-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Share2 size={16} className="text-yellow-400" />
-                    <span className="text-white/80 text-sm">Shares</span>
-                  </div>
-                  <div className="text-white text-2xl font-bold">{formatNumber(story.shares)}</div>
-                </div>
-              </div>
-              
-              {/* Engagement Rate */}
-              <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-xl p-4 backdrop-blur-sm">
-                <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp size={16} className="text-purple-400" />
-                  <span className="text-white/80 text-sm">Engagement Rate</span>
-                </div>
-                <div className="text-white text-2xl font-bold">
-                  {((story.likes + story.replies + story.shares) / story.views * 100).toFixed(1)}%
-                </div>
-                <div className="w-full bg-white/20 rounded-full h-2 mt-2">
-                  <div 
-                    className="bg-gradient-to-r from-purple-400 to-pink-400 h-2 rounded-full transition-all duration-1000"
-                    style={{ width: `${Math.min(100, (story.likes + story.replies + story.shares) / story.views * 100)}%` }}
-                  />
-                </div>
-              </div>
+          {/* Swipe Up Indicator */}
+          {!showAnalytics && (
+            <div className={`absolute bottom-20 left-0 right-0 text-center text-white text-sm animate-bounce ${isPaused ? 'hidden' : ''}`}>
+              <ChevronUp size={24} className="mx-auto" />
+              <span className="mt-1">Swipe up for more</span>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Cinematic Bottom Actions */}
-        <div className="absolute bottom-6 left-4 right-4 z-30">
-          <div className="max-w-md mx-auto">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-6">
+          {/* Cinematic Footer */}
+          <div className="absolute bottom-0 left-0 right-0 z-30 p-4 flex items-center gap-3">
+            {!showReplyInput ? (
+              <>
                 <button
-                  onClick={() => setIsLiked(!isLiked)}
-                  className="transform transition-all duration-200 hover:scale-110 active:scale-125"
+                  onClick={() => setShowReplyInput(true)}
+                  className="flex-1 px-4 py-2 bg-white/20 text-white rounded-full backdrop-blur-md hover:bg-white/30 transition-colors text-left"
                 >
-                  <Heart 
-                    size={28} 
-                    className={`${isLiked ? 'fill-red-500 text-red-500' : 'text-white'} transition-colors drop-shadow-lg`}
-                  />
+                  Send message...
                 </button>
                 <button
-                  onClick={() => setShowReplyInput(!showReplyInput)}
-                  className="transform transition-all duration-200 hover:scale-110 active:scale-125"
+                  onClick={handleLike}
+                  className={`p-2 rounded-full backdrop-blur-md ${isLiked ? 'bg-red-500' : 'bg-white/20'} text-white hover:bg-white/30 transition-colors`}
                 >
-                  <MessageCircle size={28} className="text-white drop-shadow-lg" />
+                  <Heart size={20} fill={isLiked ? "currentColor" : "none"} />
                 </button>
-                <button className="transform transition-all duration-200 hover:scale-110 active:scale-125">
-                  <Send size={28} className="text-white drop-shadow-lg" />
+                <button
+                  onClick={() => setShowAnalytics(true)}
+                  className="p-2 rounded-full bg-white/20 text-white backdrop-blur-md hover:bg-white/30 transition-colors"
+                >
+                  <MoreHorizontal size={20} />
                 </button>
-              </div>
-              
-              <button
-                onClick={() => setShowAnalytics(!showAnalytics)}
-                className="backdrop-blur-md bg-white/20 rounded-full p-3 hover:bg-white/30 transition-colors"
-              >
-                <TrendingUp size={20} className="text-white" />
-              </button>
-            </div>
-            
-            {/* Cinematic Reply Input */}
-            {showReplyInput && (
-              <div className="backdrop-blur-md bg-black/40 rounded-2xl p-3 transform transition-all duration-300 ease-out">
-                <div className="flex items-center gap-3">
-                  <input
-                    type="text"
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    placeholder="Send a message..."
-                    className="flex-1 bg-transparent text-white placeholder-white/60 px-4 py-3 rounded-xl focus:outline-none text-lg"
-                    onKeyPress={(e) => e.key === 'Enter' && replyText.trim() && console.log('Reply sent')}
-                  />
-                  <button
-                    onClick={() => replyText.trim() && console.log('Reply sent')}
-                    className="p-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 transition-all duration-200 transform hover:scale-105"
-                  >
-                    <Send size={20} className="text-white" />
-                  </button>
-                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Type a reply..."
+                  className="flex-1 px-4 py-2 bg-white/20 text-white rounded-full backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-white/50"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') handleSendReply();
+                  }}
+                />
+                <button
+                  onClick={handleSendReply}
+                  className="p-2 rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-50"
+                  disabled={!replyText.trim()}
+                >
+                  <Send size={20} />
+                </button>
+                <button
+                  onClick={() => setShowReplyInput(false)}
+                  className="p-2 rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
+                >
+                  <X size={20} />
+                </button>
               </div>
             )}
           </div>
         </div>
-        
-        {/* Pause Indicator */}
-        {isPaused && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-40">
-            <div className="backdrop-blur-md bg-black/60 rounded-2xl p-6">
-              <div className="flex gap-2">
-                <div className="w-2 h-8 bg-white rounded-full animate-pulse" />
-                <div className="w-2 h-8 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+
+        {/* Analytics Overlay */}
+        {showAnalytics && (
+          <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-8 z-40">
+            <button
+              onClick={() => setShowAnalytics(false)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
+            >
+              <X size={24} />
+            </button>
+            <h3 className="text-2xl font-bold text-white mb-6">Story Analytics</h3>
+            <div className="grid grid-cols-2 gap-6 text-white text-center">
+              <div className="flex flex-col items-center">
+                <Eye size={36} className="text-blue-400 mb-2" />
+                <span className="text-3xl font-bold">{formatNumber(story.views)}</span>
+                <span className="text-sm text-gray-300">Views</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <Heart size={36} className="text-red-400 mb-2" />
+                <span className="text-3xl font-bold">{formatNumber(story.likes)}</span>
+                <span className="text-sm text-gray-300">Likes</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <MessageCircle size={36} className="text-green-400 mb-2" />
+                <span className="text-3xl font-bold">{formatNumber(story.replies)}</span>
+                <span className="text-sm text-gray-300">Replies</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <Share2 size={36} className="text-purple-400 mb-2" />
+                <span className="text-3xl font-bold">{formatNumber(story.shares)}</span>
+                <span className="text-sm text-gray-300">Shares</span>
               </div>
             </div>
+
+            {canDelete && (
+              <button
+                onClick={() => {
+                  onDelete?.();
+                  setShowAnalytics(false);
+                  onClose(); // Close the viewer after deleting
+                }}
+                className="mt-8 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+              >
+                <Trash2 size={20} />
+                Delete Story
+              </button>
+            )}
           </div>
         )}
-        
-        
       </div>
     </div>
   );
