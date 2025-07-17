@@ -7,6 +7,7 @@ import { Search, X, UserPlus, UserMinus } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useState, useEffect, useCallback } from "react"
+import { Switch } from "@/components/ui/switch"
 import { apiClient } from "@/lib/api-client"
 import { useAuth } from "@/lib/hooks/use-auth" // Assuming useAuth now returns User | null
 
@@ -14,7 +15,7 @@ import { ProfileHeader } from "@/components/profile/profile-header"
 import { PostCard } from "@/components/feed/post-card"
 import { PostCreator } from "@/components/feed/post-creator"
 import { MainLayout } from "@/components/layout/main-layout"
-import { User as UserIcon, Mail, Building2, Briefcase, CircleDot, MapPin, Calendar, Clock, Link as LinkIcon, Star } from "lucide-react" 
+import { User as UserIcon, Mail, Building2, Briefcase, CircleDot, MapPin, Calendar, Clock, Link as LinkIcon, Star } from "lucide-react" 
 import type { User } from '@/lib/hooks/use-auth'; // Update this path to where your User type is actually defined
 
 
@@ -51,7 +52,7 @@ interface InfoCardProps {
 }
 
 const InfoCard = ({ icon, title, value, isEmail = false }: InfoCardProps) => (
-  <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-zinc-900 rounded-lg border border-gray-100 dark:border-zinc-800 hover:bg-gray-50/50 dark:hover:bg-zinc-800/70 transition-colors">
+  <div className="flex items-start gap-3 p-2.5 bg-gray-50 dark:bg-zinc-900 rounded-lg border border-gray-100 dark:border-zinc-800 hover:bg-gray-50/50 dark:hover:bg-zinc-800/70 transition-colors">
     <div className="p-1.5 bg-blue-100 dark:bg-blue-900 rounded-lg text-blue-600 dark:text-blue-300">
       {icon}
     </div>
@@ -97,22 +98,37 @@ const SocialLinkCard = ({ platform, handle, url }: SocialLinkCardProps) => {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:shadow-sm transition-all"
+      className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-200 hover:shadow-sm transition-all"
     >
-      <div className={`p-2 rounded-lg flex items-center justify-center ${platformColors[platform as keyof typeof platformColors]}`}>
+      <div className={`p-1.5 rounded-lg flex items-center justify-center ${platformColors[platform as keyof typeof platformColors]}`}>
         <img src={platformIcons[platform]} alt={platform} className="h-5 w-5" />
       </div>
       <div>
         <p className="text-sm font-medium text-gray-700 capitalize">{platform}</p>
-        <p className="text-sm text-gray-500 truncate max-w-[120px]">@{handle}</p>
+        <p className="text-sm text-gray-500 truncate">{handle.startsWith('@') ? handle : `@${handle}`}</p>
       </div>
     </a>
   );
 };
 
-
-export default function ProfilePage() {
+// This is the missing functional component declaration
+export default function Profile() {
   const { user, refreshUser } = useAuth(); // user is now typed as User | null
+
+  // Visibility state for each info field (default: all public)
+  const [visibility, setVisibility] = useState({
+    email: true,
+    bio: true,
+    location: true,
+    branch: true,
+  });
+
+  // TODO: Load/save visibility from API/user object
+  // For now, just local state
+
+  const handleToggle = (field: keyof typeof visibility) => {
+    setVisibility(prev => ({ ...prev, [field]: !prev[field] }));
+  }
 
   // Redirect to onboarding if required fields are missing
   useEffect(() => {
@@ -327,7 +343,7 @@ export default function ProfilePage() {
 
   return (
     <MainLayout>
-      <main className="w-full max-w-2xl mx-auto space-y-6 px-4 py-6 sm:px-6 md:px-8 lg:px-0">
+      <main className="w-full max-w-2xl mx-auto space-y-8 px-4 py-6 sm:px-6 md:px-8 lg:px-0">
         {user ? (
           <div className="w-full">
             <ProfileHeader
@@ -339,108 +355,122 @@ export default function ProfilePage() {
 
             {/* --- User Details Section --- */}
             <Card className="mt-6 rounded-xl shadow-sm">
-              <CardContent className="p-6 space-y-6">
-                <h3 className="text-xl font-bold text-gray-800 pb-3 border-b">Personal Information</h3>
+              <CardContent className="p-5 space-y-5"> {/* Reduced padding and space-y */}
+                <h3 className="text-xl font-bold text-gray-800 pb-2 border-b">Personal Information</h3> {/* Reduced pb */}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Enhanced Info Cards */}
-                  <InfoCard
-                    icon={<UserIcon className="h-5 w-5" />} // Use UserIcon here
-                    title="Full Name"
-                    value={
-                      (user.firstName?.trim() && user.lastName?.trim())
-                        ? `${user.firstName.trim()} ${user.lastName.trim()}`
-                        : user.firstName?.trim()
-                        ? user.firstName.trim()
-                        : user.lastName?.trim()
-                        ? user.lastName.trim()
-                        : user.username
-                    }
-                  />
-
-                  <InfoCard
-                    icon={<Mail className="h-5 w-5" />}
-                    title="Email"
-                    value={user.email}
-                    isEmail={true}
-                  />
-                  {/* Additional user info cards can go here, e.g., location, joined date */}
-                  {user.location && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Reduced gap */}
+                  {/* Enhanced Info Cards with visibility toggle only for requested fields */}
+                  <div className="flex items-center gap-2">
+                    <InfoCard
+                      icon={<UserIcon className="h-5 w-5" />}
+                      title="Full Name"
+                      value={
+                        (user.firstName?.trim() && user.lastName?.trim())
+                          ? `${user.firstName.trim()} ${user.lastName.trim()}`
+                          : user.firstName?.trim()
+                          ? user.firstName.trim()
+                          : user.lastName?.trim()
+                          ? user.lastName.trim()
+                          : user.username
+                      }
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <InfoCard
+                      icon={<Mail className="h-5 w-5" />}
+                      title="Email"
+                      value={user.email}
+                      isEmail={true}
+                    />
+                    <Switch checked={visibility.email} onCheckedChange={() => handleToggle('email')} />
+                    <span className="text-xs text-gray-500 min-w-[45px]">{visibility.email ? 'Public' : 'Private'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <InfoCard
                       icon={<MapPin className="h-5 w-5" />}
                       title="Location"
-                      value={user.location}
+                      value={user.location || ''}
                     />
-                  )}
-                  {user.createdAt && (
+                  </div>
+                  <div className="flex items-center gap-2">
                     <InfoCard
-                      icon={<Calendar className="h-5 w-5" />}
-                      title="Joined"
-                      value={new Date(user.createdAt).toLocaleDateString(undefined, {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
+                      icon={<Briefcase className="h-5 w-5" />}
+                      title="Branch"
+                      value={user.branch || 'Not specified'}
                     />
-                  )}
+                  </div>
                 </div>
 
-                {/* Social Links - Enhanced */}
-                {user.socialLinks && (
-                  <div className="pt-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <LinkIcon className="h-4 w-4" /> {/* Using LinkIcon to avoid conflict */}
-                      Social Profiles
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {user.socialLinks.instagram && (
-                        <SocialLinkCard
-                          platform="instagram"
-                          handle={user.socialLinks.instagram}
-                          url={`https://instagram.com/${user.socialLinks.instagram}`}
-                        />
-                      )}
-                      {user.socialLinks.x && (
-                        <SocialLinkCard
-                          platform="x"
-                          handle={user.socialLinks.x}
-                          url={`https://x.com/${user.socialLinks.x}`}
-                        />
-                      )}
-                      {user.socialLinks.github && (
-                        <SocialLinkCard
-                          platform="github"
-                          handle={user.socialLinks.github}
-                          url={`https://github.com/${user.socialLinks.github}`}
-                        />
-                      )}
-                      {user.socialLinks.portfolio && (
-                        <SocialLinkCard
-                          platform="portfolio"
-                          handle="View Portfolio" // Display text for portfolio link
-                          url={user.socialLinks.portfolio}
-                        />
-                      )}
+                {/* Bio with toggle */}
+                {user.bio && (
+                  <div className="pt-3 flex items-center gap-2"> {/* Reduced pt */}
+                    <div className="flex-1">
+                      <h4 className="text-base font-semibold text-gray-800 mb-1">Bio</h4>
+                      <p className="text-gray-700 text-sm">{user.bio}</p>
                     </div>
                   </div>
                 )}
 
-                {/* Interests - Enhanced */}
+                {/* Social Links section (no visibility toggle) */}
+                {user.socialLinks && (
+                  <div className="pt-3 flex items-start gap-2"> {/* Changed to items-start for better alignment with heading */}
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2"> {/* Reduced mb */}
+                        <LinkIcon className="h-4 w-4" />
+                        Social Profiles
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"> {/* Adjusted gap */}
+                        {user.socialLinks.instagram && (
+                          <SocialLinkCard
+                            platform="instagram"
+                            handle={user.socialLinks.instagram}
+                            url={`https://instagram.com/${user.socialLinks.instagram}`}
+                          />
+                        )}
+                        {user.socialLinks.x && (
+                          <SocialLinkCard
+                            platform="x"
+                            handle={user.socialLinks.x}
+                            url={`https://x.com/${user.socialLinks.x}`}
+                          />
+                        )}
+                        {user.socialLinks.github && (
+                          <SocialLinkCard
+                            platform="github"
+                            handle={user.socialLinks.github}
+                            url={`https://github.com/${user.socialLinks.github}`}
+                          />
+                        )}
+                        {user.socialLinks.portfolio && (
+                          <SocialLinkCard
+                            platform="portfolio"
+                            handle="View Portfolio"
+                            url={user.socialLinks.portfolio}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Interests section (no visibility toggle) */}
                 {user.interests && user.interests.length > 0 && (
-                  <div className="pt-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                      <Star className="h-4 w-4" />
-                      Interests
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {user.interests.map((interest: string, idx: number) => (
-                        <div
-                          key={idx}
-                          className="bg-gradient-to-r from-blue-50 to-indigo-50 px-3 py-1.5 rounded-full text-sm font-medium text-blue-700 border border-blue-100"
-                        >
-                          {interest}
-                        </div>
-                      ))}
+                  <div className="pt-3 flex items-start gap-2"> {/* Changed to items-start */}
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2"> {/* Reduced mb */}
+                        <Star className="h-4 w-4" />
+                        Interests
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {user.interests.map((interest: string, idx: number) => (
+                          <div
+                            key={idx}
+                            className="bg-gradient-to-r from-blue-50 to-indigo-50 px-2.5 py-1 rounded-full text-sm font-medium text-blue-700 border border-blue-100" // Reduced padding
+                          >
+                            {interest}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -600,6 +630,8 @@ export default function ProfilePage() {
                       }
                     }}
                     onProfileClick={post.user?.username && post.user?.username !== user?.username ? () => window.location.href = `/profile/${post.user?.username}` : undefined}
+                    comments={[]} // Pass empty array or actual comments if available
+                    commentsLoading={false} // Pass actual loading state if available
                   />
                 ))}
               </div>

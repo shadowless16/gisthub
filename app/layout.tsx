@@ -12,7 +12,7 @@ import { ReactQueryProvider } from "@/components/react-query-provider";
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "GistHub - Student Social Platform",
+  title: "NIIT SOCIAL HUB - Techies Social Platform",
   description: "Connect with fellow students, share experiences, and build your community",
     generator: 'Ak David'
 }

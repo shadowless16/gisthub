@@ -8,6 +8,7 @@ export interface Post {
   isAnonymous: boolean
   likes: ObjectId[]
   createdAt: Date
+  taggedUserIds?: ObjectId[]
 }
 
 export interface PostResponse {

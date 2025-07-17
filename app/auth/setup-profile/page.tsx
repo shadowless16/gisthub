@@ -32,7 +32,8 @@ export default function SetupProfilePage() {
     location: user?.location || "",
     branch: user?.branch || "",
     learningPath: user?.learningPath || "",
-    dateOfBirth: user?.dateOfBirth || "",
+    dobMonth: user?.dateOfBirth?.split("-")[0] || "",
+    dobDay: user?.dateOfBirth?.split("-")[1] || "",
   })
   const [isLoading, setIsLoading] = useState(false) // State for loading
   const [cropOpen, setCropOpen] = useState(false)
@@ -54,7 +55,8 @@ export default function SetupProfilePage() {
         location: user.location || "",
         branch: user.branch || "",
         learningPath: user.learningPath || "",
-        dateOfBirth: user.dateOfBirth || "",
+        dobMonth: user.dateOfBirth?.split("-")[0] || "",
+        dobDay: user.dateOfBirth?.split("-")[1] || "",
       });
     }
   }, [user]); // Depend on user object
@@ -130,23 +132,18 @@ export default function SetupProfilePage() {
     e.preventDefault()
     setIsLoading(true)
 
-    const requiredFields = ["profilePicture", "bio", "interests", "location", "branch", "learningPath", "dateOfBirth"]
+    const requiredFields = ["profilePicture", "bio", "interests", "location", "branch", "learningPath", "dobMonth", "dobDay"];
     for (const field of requiredFields) {
       const value = profileData[field as keyof typeof profileData];
-
-      // Check if value is falsy (empty string)
-      // For profilePicture, also check if it's a valid looking URL (starts with /uploads/ or http)
       if (!value || (field === "profilePicture" && typeof value === 'string' && (!value.startsWith("/uploads/") && !value.startsWith("http")))) {
         toast({
           title: "Missing field",
-          description: `Please ${field === "profilePicture" ? "upload a profile picture" : `fill in your ${field}`}.`, // Improved message
+          description: `Please ${field === "profilePicture" ? "upload a profile picture" : `fill in your ${field}`}.`,
           variant: "destructive",
-        })
-        setIsLoading(false)
-        return
+        });
+        setIsLoading(false);
+        return;
       }
-
-      // Special check for interests if it's supposed to be an array
       if (field === "interests" && typeof value === 'string') {
         const trimmedInterests = value.split(",").map(tag => tag.trim()).filter(Boolean);
         if (trimmedInterests.length === 0) {
@@ -159,6 +156,21 @@ export default function SetupProfilePage() {
           return;
         }
       }
+    }
+
+    // Validate dateOfBirth format MM-DD
+    const dobMonth = profileData.dobMonth;
+    const dobDay = profileData.dobDay;
+    const validMonth = /^(0[1-9]|1[0-2])$/.test(dobMonth);
+    const validDay = /^(0[1-9]|[12][0-9]|3[01])$/.test(dobDay);
+    if (!validMonth || !validDay) {
+      toast({
+        title: "Invalid Date of Birth",
+        description: "Please select a valid month and day.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
     }
 
     try {
@@ -187,7 +199,7 @@ export default function SetupProfilePage() {
           location: profileData.location,
           branch: profileData.branch,
           learningPath: profileData.learningPath,
-          dateOfBirth: profileData.dateOfBirth,
+          dateOfBirth: `${profileData.dobMonth}-${profileData.dobDay}`,
         }),
       })
 
@@ -394,13 +406,41 @@ export default function SetupProfilePage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="dateOfBirth">Date of Birth</Label>
-              <Input
-                id="dateOfBirth"
-                type="date"
-                value={profileData.dateOfBirth}
-                onChange={(e) => setProfileData({ ...profileData, dateOfBirth: e.target.value })}
-                required
-              />
+              <div className="flex gap-2">
+                <select
+                  id="dobMonth"
+                  value={profileData.dobMonth}
+                  onChange={e => setProfileData({ ...profileData, dobMonth: e.target.value })}
+                  required
+                  className="border rounded px-3 py-2 text-sm"
+                >
+                  <option value="">Month</option>
+                  <option value="01">January</option>
+                  <option value="02">February</option>
+                  <option value="03">March</option>
+                  <option value="04">April</option>
+                  <option value="05">May</option>
+                  <option value="06">June</option>
+                  <option value="07">July</option>
+                  <option value="08">August</option>
+                  <option value="09">September</option>
+                  <option value="10">October</option>
+                  <option value="11">November</option>
+                  <option value="12">December</option>
+                </select>
+                <select
+                  id="dobDay"
+                  value={profileData.dobDay}
+                  onChange={e => setProfileData({ ...profileData, dobDay: e.target.value })}
+                  required
+                  className="border rounded px-3 py-2 text-sm"
+                >
+                  <option value="">Day</option>
+                  {[...Array(31)].map((_, i) => (
+                    <option key={i + 1} value={String(i + 1).padStart(2, '0')}>{i + 1}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="flex gap-3">

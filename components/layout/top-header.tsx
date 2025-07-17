@@ -11,20 +11,35 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import React from "react"
+import { useSearchUsers } from "@/hooks/use-search-users"
 import { useTheme } from "next-themes"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { useAuth } from "@/lib/hooks/use-auth.tsx"
+import { useAuth } from "@/lib/hooks/use-auth"
 import { useRouter } from "next/navigation"
 
 export function TopHeader() {
   const { theme, setTheme } = useTheme()
   const { user, logout } = useAuth()
   const router = useRouter()
+  const [searchValue, setSearchValue] = React.useState("")
+  const [showDropdown, setShowDropdown] = React.useState(false)
+  const { results, loading, error, search } = useSearchUsers()
 
   const handleLogout = async () => {
     await logout()
     router.push("/auth/login")
   }
+
+  // Search when input changes
+  React.useEffect(() => {
+    if (searchValue.length > 1) {
+      search(searchValue)
+      setShowDropdown(true)
+    } else {
+      setShowDropdown(false)
+    }
+  }, [searchValue])
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
@@ -38,10 +53,37 @@ export function TopHeader() {
             <Input
               placeholder="Search GistHub"
               className="pl-10 bg-muted/30 border-muted-foreground/20 rounded-full h-10"
+              value={searchValue}
+              onChange={e => setSearchValue(e.target.value)}
+              onFocus={() => searchValue.length > 1 && setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
             />
+            {showDropdown && (
+              <div className="absolute left-0 right-0 top-12 bg-white dark:bg-[#18181b] shadow-lg rounded-md z-50 max-h-64 overflow-auto border">
+                {loading && <div className="p-3 text-sm text-muted-foreground">Searching...</div>}
+                {error && <div className="p-3 text-sm text-red-500">{error}</div>}
+                {!loading && results.length === 0 && <div className="p-3 text-sm text-muted-foreground">No users found</div>}
+                {results.map((user: any) => (
+                  <div
+                    key={user._id}
+                    className="p-3 cursor-pointer flex items-center gap-2 bg-white dark:bg-[#18181b]"
+                    style={{ borderRadius: '0.375rem' }}
+                    onClick={() => router.push(`/profile/${user.username}`)}
+                  >
+                    <img src={user.profilePic || "/placeholder-user.jpg"} alt="avatar" className="w-7 h-7 rounded-full" />
+                    <span className="font-medium text-black dark:text-white">{user.username}</span>
+                    {(user.firstName || user.lastName) && (
+                      <span className="text-xs text-black dark:text-gray-300">
+                        {user.firstName} {user.lastName}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-
+        {/* ...existing code... */}
         <div className="flex items-center space-x-3">
           <Button
             variant="ghost"
@@ -53,7 +95,6 @@ export function TopHeader() {
             <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             <span className="sr-only">Toggle theme</span>
           </Button>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full">

@@ -38,6 +38,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       update = { $pull: { likes: currentUserObjectId } };
     } else {
       update = { $addToSet: { likes: currentUserObjectId } };
+      // Create notification for post owner if not liking own post
+      if (foundDoc.userId && !foundDoc.userId.equals(currentUserObjectId)) {
+        const notificationsCollection = db.collection("notifications");
+        const fromUser = await db.collection("users").findOne({ _id: currentUserObjectId });
+        await notificationsCollection.insertOne({
+          userId: foundDoc.userId,
+          type: "like",
+          fromUser: {
+            name: fromUser?.username || "",
+            avatar: fromUser?.profilePic || "",
+            _id: fromUser?._id,
+          },
+          message: `${fromUser?.username || "Someone"} liked your post`,
+          link: `/post/${foundDoc._id?.toString()}`,
+          read: false,
+          createdAt: new Date(),
+        });
+      }
     }
     const updateResult = await postsCollection.findOneAndUpdate(
       filter,

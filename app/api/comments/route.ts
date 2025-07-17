@@ -69,6 +69,8 @@ export async function POST(request: NextRequest) {
 
   const { db } = await connectToDatabase();
   const commentsCollection = db.collection<Comment>("comments");
+  const postsCollection = db.collection("posts");
+  const notificationsCollection = db.collection("notifications");
   const now = new Date();
 
   const result = await commentsCollection.insertOne({
@@ -79,6 +81,25 @@ export async function POST(request: NextRequest) {
     imageURL: imageURL || null, // Include imageURL, defaulting to null if not provided
     createdAt: now,
   });
+
+  // Create notification for post owner if not commenting own post
+  const post = await postsCollection.findOne({ _id: new ObjectId(postId) });
+  if (post && post.userId && post.userId.toString() !== userId) {
+    const fromUser = await db.collection("users").findOne({ _id: new ObjectId(userId) });
+    await notificationsCollection.insertOne({
+      userId: post.userId,
+      type: "comment",
+      fromUser: {
+        name: fromUser?.username || "",
+        avatar: fromUser?.profilePic || "",
+        _id: fromUser?._id,
+      },
+      message: `${fromUser?.username || "Someone"} commented on your post`,
+      link: `/post/${post._id?.toString()}`,
+      read: false,
+      createdAt: new Date(),
+    });
+  }
 
   return NextResponse.json({ success: true, commentId: result.insertedId.toString() });
 }

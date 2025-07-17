@@ -1,8 +1,9 @@
 "use client"
 
 import type React from "react"
+import type { User } from "@/types/user"
 
-import { useState } from "react"
+import { useState, useCallback } from "react" // Import useCallback
 import Cropper from "react-easy-crop"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -14,12 +15,61 @@ import { useAuth } from "@/lib/hooks/use-auth"
 import { apiClient } from "@/lib/api-client"
 import { useToast } from "@/hooks/use-toast"
 
+// Helper function to create image from URL
+const createImage = (url: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener('load', () => resolve(image));
+    image.addEventListener('error', (error) => reject(error));
+    image.setAttribute('crossOrigin', 'anonymous'); // needed to avoid cross-origin issues on canvas
+    image.src = url;
+  });
+
+// Helper function to get cropped image
+async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number; width: number; height: number }): Promise<Blob | null> {
+  const image = await createImage(imageSrc);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    return null;
+  }
+
+  const scaleX = image.naturalWidth / image.width;
+  const scaleY = image.naturalHeight / image.height;
+
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+
+  ctx.drawImage(
+    image,
+    pixelCrop.x * scaleX,
+    pixelCrop.y * scaleY,
+    pixelCrop.width * scaleX,
+    pixelCrop.height * scaleY,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height
+  );
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      resolve(blob);
+    }, 'image/jpeg', 0.95);
+  });
+}
+
+
 interface PostCreatorProps {
   onPostCreated?: () => void
 }
 
 export function PostCreator({ onPostCreated }: PostCreatorProps) {
   const [postContent, setPostContent] = useState("")
+  const [tagQuery, setTagQuery] = useState("")
+  const [taggedUsers, setTaggedUsers] = useState<User[]>([])
+  const { results: searchResults, loading: searchLoading, search } = require("@/hooks/use-search-users").useSearchUsers();
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
@@ -28,7 +78,7 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)
-  const [cropAspect, setCropAspect] = useState(16/9)
+  const [cropAspect, setCropAspect] = useState(16 / 9)
   const [isLoading, setIsLoading] = useState(false)
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
 
@@ -38,6 +88,28 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
   // Check if it's Sunday for anonymous posting
   const isSunday = new Date().getDay() === 0
 
+  // Handle tag search
+  const handleTagSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setTagQuery(value);
+    if (value.length > 1) {
+      await search(value);
+    }
+  };
+
+  // Add user to tagged list
+  const handleAddTag = (user: User) => {
+    if (!taggedUsers.some(u => u._id === user._id)) {
+      setTaggedUsers([...taggedUsers, user]);
+    }
+    setTagQuery("");
+  };
+
+  // Remove user from tagged list
+  const handleRemoveTag = (userId: string) => {
+    setTaggedUsers(taggedUsers.filter(u => u._id !== userId));
+  };
+
   const handlePost = async () => {
     if (!postContent.trim()) return;
     setIsLoading(true);
@@ -46,7 +118,8 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
         content: postContent.trim(),
         imageFile: selectedImageFile || undefined,
         isAnonymous: isSunday ? isAnonymous : false,
-      });
+        taggedUserIds: taggedUsers.map(u => u._id),
+      } as any);
       toast({
         title: "Post created!",
         description: "Your post has been shared successfully.",
@@ -55,71 +128,35 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
       setIsAnonymous(false);
       setSelectedImage(null);
       setSelectedImageFile(null);
+      setTaggedUsers([]);
+      setTagQuery("");
       setIsDialogOpen(false);
       onPostCreated?.();
     } catch (error) {
       toast({
         title: "Failed to create post",
         description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
-  }  
+  };
 
+  // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setSelectedImageFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
         setSelectedImage(e.target?.result as string);
-        setCropOpen(true);
+        setCropOpen(true); // Open crop dialog after image is loaded
       };
       reader.readAsDataURL(file);
     }
-  }  
-
-  const onCropComplete = (_: any, croppedAreaPixels: any) => {
-    setCroppedAreaPixels(croppedAreaPixels);
   };
 
-  const handleCropSave = async () => {
-    if (!selectedImage || !croppedAreaPixels) return;
-    // Convert cropped area to blob
-    const createImage = (url: string) => new Promise<HTMLImageElement>((resolve) => {
-      const img = new window.Image();
-      img.src = url;
-      img.onload = () => resolve(img);
-    });
-    const getCroppedImg = async (imageSrc: string, crop: any) => {
-      const image = await createImage(imageSrc);
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = crop.width;
-      canvas.height = crop.height;
-      ctx?.drawImage(
-        image,
-        crop.x,
-        crop.y,
-        crop.width,
-        crop.height,
-        0,
-        0,
-        crop.width,
-        crop.height
-      );
-      return new Promise<Blob>((resolve) => {
-        canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
-        }, 'image/jpeg');
-      });
-    };
-    const croppedBlob = await getCroppedImg(selectedImage, croppedAreaPixels);
-    setSelectedImageFile(new File([croppedBlob], "post-image.jpg", { type: croppedBlob.type }));
-    setCropOpen(false);
-  };
-
+  // Handle video upload
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -131,6 +168,7 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
     }
   }
 
+  // Handle emoji click
   const handleEmojiClick = () => {
     toast({
       title: "Emoji picker coming soon!",
@@ -138,6 +176,35 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
     })
   }
 
+  // Callback for when cropping is complete
+  const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  // Save cropped image
+  const handleCropSave = useCallback(async () => {
+    if (selectedImage && croppedAreaPixels) {
+      try {
+        const croppedImageBlob = await getCroppedImg(selectedImage, croppedAreaPixels);
+        if (croppedImageBlob) {
+          const croppedFile = new File([croppedImageBlob], "cropped_image.jpeg", { type: "image/jpeg" });
+          setSelectedImageFile(croppedFile);
+          setSelectedImage(URL.createObjectURL(croppedImageBlob)); // Update preview with cropped image
+          setCropOpen(false); // Close crop dialog
+        }
+      } catch (e) {
+        console.error("Error cropping image:", e);
+        toast({
+          title: "Image Cropping Failed",
+          description: "Could not crop the image. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [selectedImage, croppedAreaPixels, toast]);
+
+
+  // Return JSX from the component
   return (
     <>
       <Card className="shadow-sm">
@@ -210,8 +277,8 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
                         <div className="flex gap-2 px-4 py-2 border-b">
                           <span className="text-xs font-medium">Aspect Ratio:</span>
                           <Button size="sm" variant={cropAspect === 1 ? "default" : "secondary"} onClick={() => setCropAspect(1)}>1:1</Button>
-                          <Button size="sm" variant={cropAspect === 4/5 ? "default" : "secondary"} onClick={() => setCropAspect(4/5)}>4:5</Button>
-                          <Button size="sm" variant={cropAspect === 16/9 ? "default" : "secondary"} onClick={() => setCropAspect(16/9)}>16:9</Button>
+                          <Button size="sm" variant={cropAspect === 4 / 5 ? "default" : "secondary"} onClick={() => setCropAspect(4 / 5)}>4:5</Button>
+                          <Button size="sm" variant={cropAspect === 16 / 9 ? "default" : "secondary"} onClick={() => setCropAspect(16 / 9)}>16:9</Button>
                         </div>
                         <div className="relative w-full h-80 bg-black">
                           <Cropper
@@ -251,6 +318,38 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
                           <ToggleLeft className="w-8 h-8 text-muted-foreground" />
                         )}
                       </Button>
+                    </div>
+                  )}
+
+                  {/* Tagging UI */}
+                  <div className="flex gap-2 flex-wrap mb-2">
+                    {taggedUsers.map(u => (
+                      <span key={u._id} className="bg-muted px-2 py-1 rounded flex items-center gap-1">
+                        @{u.username}
+                        <button type="button" onClick={() => handleRemoveTag(u._id)} className="ml-1 text-xs">×</button>
+                      </span>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={tagQuery}
+                    onChange={handleTagSearch}
+                    placeholder="Tag users..."
+                    className="mb-2 px-2 py-1 border rounded w-full"
+                  />
+                  {tagQuery.length > 1 && (
+                    <div className="bg-white border rounded shadow p-2 mb-2">
+                      {searchLoading ? (
+                        <span>Searching...</span>
+                      ) : (
+                        searchResults
+                          .filter((u: User) => !taggedUsers.some(tu => tu._id === u._id))
+                          .map((u: User) => (
+                            <div key={u._id} className="cursor-pointer hover:bg-muted px-2 py-1" onClick={() => handleAddTag(u)}>
+                              @{u.username}
+                            </div>
+                          ))
+                      )}
                     </div>
                   )}
 
@@ -324,5 +423,5 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
         </CardContent>
       </Card>
     </>
-  )
+  );
 }

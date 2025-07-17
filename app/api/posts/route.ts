@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { content, imageURL, isAnonymous } = await request.json()
+    const { content, imageURL, isAnonymous, taggedUserIds } = await request.json()
 
     if (!content || content.trim().length === 0) {
       return NextResponse.json({ error: "Content is required" }, { status: 400 })
@@ -109,10 +109,32 @@ export async function POST(request: NextRequest) {
       isAnonymous: Boolean(isAnonymous),
       likes: [],
       createdAt: new Date(),
+      taggedUserIds: taggedUserIds ? taggedUserIds.map((id: string) => new ObjectId(id)) : [],
     }
 
     const result = await postsCollection.insertOne(newPost)
     const createdPost = await postsCollection.findOne({ _id: result.insertedId })
+
+    // Create notifications for tagged users
+    if (taggedUserIds && Array.isArray(taggedUserIds) && taggedUserIds.length > 0 && createdPost) {
+      const notificationsCollection = db.collection("notifications")
+      const fromUser = await db.collection("users").findOne({ _id: new ObjectId(currentUser.userId) })
+      const postIdStr = createdPost?._id ? createdPost._id.toString() : "";
+      const notificationDocs = taggedUserIds.map((taggedId: string) => ({
+        userId: new ObjectId(taggedId),
+        type: "mention",
+        fromUser: {
+          name: fromUser?.username || "",
+          avatar: fromUser?.profilePic || "",
+          _id: fromUser?._id,
+        },
+        message: `${fromUser?.username || "Someone"} tagged you in a post`,
+        link: `/post/${postIdStr}`,
+        read: false,
+        createdAt: new Date(),
+      }))
+      await notificationsCollection.insertMany(notificationDocs)
+    }
 
     if (!createdPost) {
       return NextResponse.json({ error: "Failed to create post" }, { status: 500 })
@@ -120,7 +142,7 @@ export async function POST(request: NextRequest) {
 
     // Get user data for response (if not anonymous)
     let userData
-    if (!createdPost.isAnonymous) {
+    if (createdPost && !createdPost.isAnonymous) {
       const usersCollection = db.collection("users")
       const user = await usersCollection.findOne({ _id: createdPost.userId })
       if (user) {
