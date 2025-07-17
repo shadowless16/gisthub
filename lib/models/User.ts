@@ -8,6 +8,8 @@ const UserSchema = new Schema({
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   branch: { type: String, required: true },
+  learningPath: { type: String },
+  dateOfBirth: { type: String },
   isAlumni: { type: Boolean, default: false },
   profilePic: { type: String }, // URL or base64
   bio: { type: String },
@@ -42,6 +44,8 @@ export function sanitizeUser(user: any) {
     firstName: user.firstName,
     lastName: user.lastName,
     branch: user.branch,
+    learningPath: user.learningPath,
+    dateOfBirth: user.dateOfBirth,
     isAlumni: user.isAlumni,
     profilePic: user.profilePic,
     bio: user.bio,

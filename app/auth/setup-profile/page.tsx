@@ -31,6 +31,8 @@ export default function SetupProfilePage() {
     interests: user?.interests?.join(", ") || "", // Join array back to string for input
     location: user?.location || "",
     branch: user?.branch || "",
+    learningPath: user?.learningPath || "",
+    dateOfBirth: user?.dateOfBirth || "",
   })
   const [isLoading, setIsLoading] = useState(false) // State for loading
   const [cropOpen, setCropOpen] = useState(false)
@@ -51,13 +53,13 @@ export default function SetupProfilePage() {
         interests: user.interests?.join(", ") || "",
         location: user.location || "",
         branch: user.branch || "",
+        learningPath: user.learningPath || "",
+        dateOfBirth: user.dateOfBirth || "",
       });
     }
   }, [user]); // Depend on user object
 
 
-  // Upload profile picture to backend and set URL
-  // This function now correctly accesses `setIsLoading` and `setProfileData`
   const handleProfilePictureUpload = async (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -128,7 +130,7 @@ export default function SetupProfilePage() {
     e.preventDefault()
     setIsLoading(true)
 
-    const requiredFields = ["profilePicture", "bio", "interests", "location", "branch"]
+    const requiredFields = ["profilePicture", "bio", "interests", "location", "branch", "learningPath", "dateOfBirth"]
     for (const field of requiredFields) {
       const value = profileData[field as keyof typeof profileData];
 
@@ -184,6 +186,8 @@ export default function SetupProfilePage() {
           interests: interestsArray,
           location: profileData.location,
           branch: profileData.branch,
+          learningPath: profileData.learningPath,
+          dateOfBirth: profileData.dateOfBirth,
         }),
       })
 
@@ -348,13 +352,53 @@ export default function SetupProfilePage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="branch">Branch</Label>
-              <Input
+              <Label htmlFor="branch">NIIT Branch</Label>
+              <select
                 id="branch"
-                type="text"
-                placeholder="e.g. Computer Science, Electrical Engineering"
                 value={profileData.branch}
                 onChange={(e) => setProfileData({ ...profileData, branch: e.target.value })}
+                required
+                className="w-full border rounded px-3 py-2 text-sm"
+              >
+                <option value="">Select Branch</option>
+                <option value="Ikeja">Ikeja</option>
+                <option value="Surulere">Surulere</option>
+                <option value="Ajah">Ajah</option>
+                <option value="Abeokuta">Abeokuta</option>
+                <option value="Ibadan">Ibadan</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="learningPath">Learning Path</Label>
+              <select
+                id="learningPath"
+                value={profileData.learningPath}
+                onChange={(e) => setProfileData({ ...profileData, learningPath: e.target.value })}
+                required
+                className="w-full border rounded px-3 py-2 text-sm"
+              >
+                <option value="">Select Learning Path</option>
+                <option value="Software Engineering">Software Engineering</option>
+                <option value="Web Development">Web Development</option>
+                <option value="Data Science">Data Science</option>
+                <option value="Cloud & DevOps">Cloud & DevOps</option>
+                <option value="UI/UX Design">UI/UX Design</option>
+                <option value="Cybersecurity">Cybersecurity</option>
+                <option value="AI & Machine Learning">AI & Machine Learning</option>
+                <option value="Office Productivity (Basic IT)">Office Productivity (Basic IT)</option>
+                <option value="Project Management">Project Management</option>
+                <option value="Networking & Hardware">Networking & Hardware</option>
+                <option value="Others">Others</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dateOfBirth">Date of Birth</Label>
+              <Input
+                id="dateOfBirth"
+                type="date"
+                value={profileData.dateOfBirth}
+                onChange={(e) => setProfileData({ ...profileData, dateOfBirth: e.target.value })}
                 required
               />
             </div>

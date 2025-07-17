@@ -42,6 +42,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (body.socialLinks !== undefined) update.socialLinks = body.socialLinks
     if (body.interests !== undefined) update.interests = body.interests
     if (body.location !== undefined) update.location = body.location
+    if (body.branch !== undefined) update.branch = body.branch
+    if (body.learningPath !== undefined) update.learningPath = body.learningPath
+    if (body.dateOfBirth !== undefined) update.dateOfBirth = body.dateOfBirth
     console.log("[PATCH USER] Update object:", update)
 
     const result = await usersCollection.findOneAndUpdate(

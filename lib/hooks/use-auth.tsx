@@ -21,6 +21,8 @@ export interface User {
   }
   interests?: string[]
   location?: string
+  learningPath?: string
+  dateOfBirth?: string
   followers: string[]
   following: string[]
   createdAt: string
