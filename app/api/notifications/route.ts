@@ -1,5 +1,7 @@
+
 import { connectToDatabase } from "@/lib/mongodb"
 import { type NextRequest, NextResponse } from "next/server"
+import { ObjectId } from "mongodb"
 
 
 export async function GET(request: NextRequest) {
@@ -12,7 +14,7 @@ export async function GET(request: NextRequest) {
   const { db } = await connectToDatabase()
   const notifications = await db
     .collection("notifications")
-    .find({ userId })
+    .find({ userId: new ObjectId(userId) })
     .sort({ createdAt: -1 })
     .toArray()
   return NextResponse.json(notifications)
