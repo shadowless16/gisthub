@@ -8,6 +8,7 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
+    // domains: ["res.cloudinary.com"],
   },
   // Remove this env block as JWT_SECRET is server-side only
   // env: {

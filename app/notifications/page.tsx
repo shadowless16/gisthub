@@ -6,46 +6,37 @@ import { Bell, Heart, MessageCircle, UserPlus } from "lucide-react"
 import { useEffect, useState } from "react"
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [postSnippets, setPostSnippets] = useState<Record<string, string>>({})
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [postSnippets, setPostSnippets] = useState<Record<string, string>>({});
+  const [marking, setMarking] = useState<string | null>(null); // notification id being marked
 
-  useEffect(() => {
-    // Fetch userId from /api/auth/me or your auth context
-    async function fetchNotifications() {
-      setLoading(true)
-      try {
-        // Example: fetch userId from /api/auth/me
-        const meRes = await fetch("/api/auth/me")
-        const me = await meRes.json()
-        if (!me.user || !me.user._id) {
-          setNotifications([])
-          setLoading(false)
-          return
-        }
-        const res = await fetch(`/api/notifications?userId=${me.user._id}`)
-        const data = await res.json()
-        setNotifications(data)
+  async function fetchNotifications() {
+    setLoading(true);
+    try {
+      const meRes = await fetch("/api/auth/me");
+      const me = await meRes.json();
+      if (!me.user || !me.user._id) {
+        setNotifications([]);
+        setLoading(false);
+        return;
+      }
+      const res = await fetch(`/api/notifications?userId=${me.user._id}`);
+      const data = await res.json();
+      setNotifications(data);
 
-        // Find all post IDs from notifications
-        const postIds = data
-          .map((notif: any) => {
-            let postId = null;
-            if (notif.link && notif.link.match(/\/(post|feed)\/(\w+)/)) {
-              postId = notif.link.match(/\/(post|feed)\/(\w+)/)[2];
-            }
-            return postId;
-          })
-          .filter((id: string | null) => !!id);
-
-        // Fetch post snippets in parallel
-        const snippets: Record<string, string> = {};
-        await Promise.all(
-          postIds.map(async (postId: string) => {
+      // For each notification, fetch its post snippet and map by postId
+      const snippets: Record<string, string> = {};
+      await Promise.all(
+        data.map(async (notif: any) => {
+          let postId = null;
+          if (notif.link && notif.link.match(/\/(post|feed)\/(\w+)/)) {
+            postId = notif.link.match(/\/(post|feed)\/(\w+)/)[2];
+          }
+          if (postId && !snippets[postId]) {
             try {
               const postRes = await fetch(`/api/posts?id=${postId}`);
               const postData = await postRes.json();
-              // postData.post or postData.posts[0]
               let post = postData.post || (postData.posts && postData.posts[0]);
               if (post && post.content) {
                 snippets[postId] = post.content.slice(0, 40) + (post.content.length > 40 ? "..." : "");
@@ -53,18 +44,49 @@ export default function NotificationsPage() {
             } catch (e) {
               // ignore
             }
-          })
-        );
-        setPostSnippets(snippets);
-      } catch (err) {
-        console.error("Error fetching notifications:", err)
-        setNotifications([])
-      } finally {
-        setLoading(false)
-      }
+          }
+        })
+      );
+      setPostSnippets(snippets);
+    } catch (err) {
+      console.error("Error fetching notifications:", err);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
     }
-    fetchNotifications()
-  }, [])
+  }
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  // Mark notification as read/unread
+  async function markRead(notifId: string, read: boolean) {
+    setMarking(notifId);
+    // Optimistically update UI
+    setNotifications((prev) =>
+      prev.map((n) => {
+        const nId = typeof n._id === "object" && n._id !== null && "$oid" in n._id ? n._id.$oid : n._id;
+        return nId === notifId ? { ...n, read } : n;
+      })
+    );
+    try {
+      const res = await fetch(`/api/notifications/${notifId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ read }),
+      });
+      if (!res.ok) {
+        // If server failed, revert
+        await fetchNotifications();
+      }
+    } catch (e) {
+      // On error, revert
+      await fetchNotifications();
+    } finally {
+      setMarking(null);
+    }
+  }
 
   return (
     <MainLayout>
@@ -94,7 +116,6 @@ export default function NotificationsPage() {
             {notifications.map((notif) => {
               // Handle _id as string or object (e.g., { $oid: "..." })
               const notifId = typeof notif._id === "object" && notif._id !== null && "$oid" in notif._id ? notif._id.$oid : notif._id;
-              // Choose icon based on notification type
               let Icon = Bell;
               if (notif.type === "like") Icon = Heart;
               else if (notif.type === "mention") Icon = UserPlus;
@@ -108,10 +129,20 @@ export default function NotificationsPage() {
               if (postLink && postLink.startsWith("/post/")) {
                 postLink = postLink.replace("/post/", "/feed/");
               }
+              const isRead = notif.read;
               return (
-                <Card key={notifId}>
+                <Card
+                  key={notifId}
+                  className={
+                    "transition-all cursor-pointer " +
+                    (isRead ? "bg-muted/50 opacity-70" : "bg-white border-blue-400 border-2 shadow-md")
+                  }
+                  onClick={() => {
+                    if (!isRead) markRead(notifId, true);
+                  }}
+                >
                   <CardContent className="p-4 flex items-center gap-4">
-                    <Icon className="w-8 h-8 text-muted-foreground" />
+                    <Icon className={"w-8 h-8 " + (isRead ? "text-muted-foreground" : "text-blue-500")} />
                     {notif.fromUser?.avatar && (
                       <img
                         src={notif.fromUser.avatar}
@@ -120,7 +151,7 @@ export default function NotificationsPage() {
                       />
                     )}
                     <div className="flex-1 text-left">
-                      <div className="font-medium">{notif.message}</div>
+                      <div className={"font-medium " + (isRead ? "" : "font-bold")}>{notif.message}</div>
                       {postId && postSnippets[postId] && (
                         <div className="text-xs text-muted-foreground italic mt-1">
                           {postSnippets[postId]}
@@ -128,17 +159,38 @@ export default function NotificationsPage() {
                       )}
                       <div className="text-xs text-muted-foreground">{new Date(notif.createdAt).toLocaleString()}</div>
                     </div>
-                    {postLink && (
-                      <a
-                        href={postLink}
-                        className="text-blue-500 hover:underline text-sm"
+                    <div className="flex flex-col items-end gap-2">
+                      {postLink && (
+                        <a
+                          href={postLink}
+                          className="text-blue-500 hover:underline text-sm"
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (!isRead) markRead(notifId, true);
+                          }}
+                        >
+                          View
+                        </a>
+                      )}
+                      <button
+                        className={
+                          "text-xs px-2 py-1 rounded " +
+                          (isRead
+                            ? "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                            : "bg-blue-500 text-white hover:bg-blue-600")
+                        }
+                        disabled={marking === notifId}
+                        onClick={e => {
+                          e.stopPropagation();
+                          markRead(notifId, !isRead);
+                        }}
                       >
-                        View
-                      </a>
-                    )}
+                        {isRead ? "Mark as Unread" : "Mark as Read"}
+                      </button>
+                    </div>
                   </CardContent>
                 </Card>
-              )
+              );
             })}
           </div>
         )}

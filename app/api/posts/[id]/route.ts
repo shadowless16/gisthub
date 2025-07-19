@@ -1,30 +1,53 @@
-import { NextRequest, NextResponse } from "next/server";
+// app/api/posts/[id]/route.ts
+import { type NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
-import { getUserFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } } // Use 'id' here
+) {
+  const start = Date.now();
   try {
-    const user = await getUserFromRequest(request);
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { id } = params; // Extract 'id' directly from path parameters
+
+    if (!id) {
+      return NextResponse.json({ error: "Post ID is required" }, { status: 400 });
     }
+
     const { db } = await connectToDatabase();
     const postsCollection = db.collection("posts");
-    const post = await postsCollection.findOne({ _id: new ObjectId(params.id) });
+    const usersCollection = db.collection("users");
+
+    const post = await postsCollection.findOne({ _id: new ObjectId(id) }); // Use 'id' here
+
     if (!post) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
-    // Defensive: ensure both IDs are strings before comparing, and only compare once
-    const postUserId = post.userId?.toString?.() || post.userId || "";
-    const requestUserId = user?.userId?.toString?.() || user?.userId || "";
-    if (!postUserId || !requestUserId || postUserId !== requestUserId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    let userData = null;
+    if (!post.isAnonymous && post.userId) {
+      const user = await usersCollection.findOne({ _id: new ObjectId(post.userId) });
+      if (user) {
+        userData = {
+          username: user.username,
+          profilePic: user.profilePic,
+        };
+      }
     }
-    await postsCollection.deleteOne({ _id: new ObjectId(params.id) });
-    return NextResponse.json({ success: true });
+
+    const sanitizedPost = {
+      ...post,
+      user: userData
+    };
+
+    const duration = Date.now() - start;
+    console.log(`[API LOG] /api/posts/${id} GET took ${duration}ms`);
+
+    return NextResponse.json({ post: sanitizedPost });
   } catch (error) {
-    console.error("Delete post error:", error);
+    const duration = Date.now() - start;
+    console.error(`[API ERROR] /api/posts/[id] GET failed after ${duration}ms:`, error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

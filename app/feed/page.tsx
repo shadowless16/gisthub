@@ -46,7 +46,6 @@ export default function FeedPage() {
     queryKey: ['posts'],
     queryFn: async ({ pageParam = 0 }) => {
       const response = await apiClient.getPosts({ includeAnonymous: true, limit, skip: pageParam }) as any;
-      // Batch fetch comments for all posts
       let commentsByPost = {};
       if (response.posts.length > 0) {
         const postIds = response.posts.map((p: Post) => p._id).join(",");
@@ -72,7 +71,6 @@ export default function FeedPage() {
   };
 
   const handlePostUpdate = (postId: string, updates: Partial<Post>) => {
-    // Optionally, you can refetch or update cache here
     refetch();
   };
 
@@ -124,14 +122,24 @@ export default function FeedPage() {
           ) : (
             <>
               {posts.map((post) => (
-                <PostCard
+                <div
                   key={post._id}
-                  post={post}
-                  comments={commentsByPost[post._id] || []}
-                  commentsLoading={isFetching}
-                  onUpdate={() => handlePostUpdate(post._id, {})}
-                  onDelete={handlePostDelete}
-                />
+                  style={{ cursor: "pointer" }}
+                  onClick={e => {
+                    if ((e.target as HTMLElement).closest("button, a, input, textarea, svg")) return;
+                    window.location.href = `/feed/${post._id}`;
+                  }}
+                >
+                  <PostCard
+                    post={post}
+                    comments={commentsByPost[post._id] || []}
+                    commentsLoading={isFetching}
+                    onUpdate={() => handlePostUpdate(post._id, {})}
+                    onDelete={handlePostDelete}
+                    onCommentAdded={refetch}
+                    disableDetailNavigation={false}
+                  />
+                </div>
               ))}
               {hasNextPage && (
                 <div className="flex justify-center py-4">

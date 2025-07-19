@@ -3,17 +3,26 @@
 import type React from "react"
 import type { User } from "@/types/user"
 
-import { useState, useCallback } from "react" // Import useCallback
+import { useState, useCallback, useRef, useEffect } from "react" // Import useCallback, useRef, useEffect
 import Cropper from "react-easy-crop"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
-import { ImageIcon, Video, ToggleLeft, ToggleRight, Smile, Loader2 } from "lucide-react"
+import { ImageIcon, Video, ToggleLeft, ToggleRight, Smile, Loader2, Trash2 } from "lucide-react" // Added Trash2
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useAuth } from "@/lib/hooks/use-auth"
-import { apiClient } from "@/lib/api-client"
+import { apiClient } from "@/lib/api-client" // Ensure this is correctly imported
 import { useToast } from "@/hooks/use-toast"
+import Picker from '@emoji-mart/react' // Import emoji picker
+import data from '@emoji-mart/data' // Emoji data
+
+// Interface for UserSearchResult - this is what your API should return
+interface UserSearchResult {
+  _id: string;
+  username: string;
+  profilePic?: string;
+}
 
 // Helper function to create image from URL
 const createImage = (url: string): Promise<HTMLImageElement> =>
@@ -61,86 +70,191 @@ async function getCroppedImg(imageSrc: string, pixelCrop: { x: number; y: number
 }
 
 
+// Custom hook for managing mention functionality (copied from previous response)
+const useMentions = (textareaRef: React.RefObject<HTMLTextAreaElement>) => {
+  const [searchTerm, setSearchTerm] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<UserSearchResult[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [mentionStartIndex, setMentionStartIndex] = useState(-1);
+  const { toast } = useToast();
+  const suggestionListRef = useRef<HTMLDivElement>(null); // Ref for the suggestion list
+
+  const fetchSuggestions = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    try {
+      const response = await apiClient.getUsersBySearch(query) as { results: UserSearchResult[] };
+      setSuggestions(response.results);
+      setShowSuggestions(response.results.length > 0);
+      setSelectedIndex(0);
+    } catch (error) {
+      toast({
+        title: "Error fetching users",
+        description: error instanceof Error ? error.message : "Failed to fetch user suggestions.",
+        variant: "destructive",
+      });
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [toast]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const { value, selectionStart } = e.target;
+    let newSearchTerm: string | null = null;
+    let newMentionStartIndex = -1;
+
+    const textBeforeCursor = value.substring(0, selectionStart);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex !== -1) {
+      const potentialMention = textBeforeCursor.substring(lastAtIndex + 1);
+      const usernameMatch = potentialMention.match(/^([a-zA-Z0-9_]*)$/);
+
+      if (usernameMatch && usernameMatch[1] !== undefined) {
+        newSearchTerm = usernameMatch[1];
+        newMentionStartIndex = lastAtIndex;
+      }
+    }
+
+    setSearchTerm(newSearchTerm);
+    setMentionStartIndex(newMentionStartIndex);
+
+    if (newSearchTerm) {
+      fetchSuggestions(newSearchTerm);
+    } else {
+      setShowSuggestions(false);
+      setSuggestions([]);
+    }
+  }, [fetchSuggestions]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!showSuggestions) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev + 1) % suggestions.length);
+      if (suggestionListRef.current) {
+        const item = suggestionListRef.current.children[selectedIndex];
+        item?.scrollIntoView({ block: 'nearest' });
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
+      if (suggestionListRef.current) {
+        const item = suggestionListRef.current.children[selectedIndex];
+        item?.scrollIntoView({ block: 'nearest' });
+      }
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      if (suggestions.length > 0) {
+        e.preventDefault();
+        const selectedUsername = suggestions[selectedIndex].username;
+        const textarea = textareaRef.current;
+        if (textarea && searchTerm !== null && mentionStartIndex !== -1) {
+          const start = textarea.value.substring(0, mentionStartIndex);
+          const afterMention = textarea.value.substring(mentionStartIndex + 1 + searchTerm.length);
+          const newValue = `${start}@${selectedUsername} ${afterMention}`;
+          textarea.value = newValue;
+          textarea.setSelectionRange(start.length + 1 + selectedUsername.length + 1, start.length + 1 + selectedUsername.length + 1);
+          // Update React state if a setter is provided (for controlled Textarea)
+          if (typeof (window as any).setPostContent === 'function') {
+            (window as any).setPostContent(newValue);
+          }
+          const event = new Event('input', { bubbles: true });
+          textarea.dispatchEvent(event);
+        }
+        setShowSuggestions(false);
+        setSearchTerm(null);
+        setSuggestions([]);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setSearchTerm(null);
+      setSuggestions([]);
+    }
+  }, [showSuggestions, suggestions, selectedIndex, searchTerm, mentionStartIndex, textareaRef]);
+
+  const handleSelectSuggestion = useCallback((username: string) => {
+    const textarea = textareaRef.current;
+    if (textarea && searchTerm !== null && mentionStartIndex !== -1) {
+      const start = textarea.value.substring(0, mentionStartIndex);
+      const afterMention = textarea.value.substring(mentionStartIndex + 1 + searchTerm.length);
+      const newValue = `${start}@${username} ${afterMention}`;
+      textarea.value = newValue;
+      textarea.setSelectionRange(start.length + 1 + username.length + 1, start.length + 1 + username.length + 1);
+      // Update React state if a setter is provided (for controlled Textarea)
+      if (typeof (window as any).setPostContent === 'function') {
+        (window as any).setPostContent(newValue);
+      }
+      const event = new Event('input', { bubbles: true });
+      textarea.dispatchEvent(event);
+    }
+    setShowSuggestions(false);
+    setSearchTerm(null);
+    setSuggestions([]);
+  }, [searchTerm, mentionStartIndex, textareaRef]);
+
+  return {
+    searchTerm,
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+    handleInputChange,
+    handleKeyDown,
+    handleSelectSuggestion,
+    setShowSuggestions,
+    suggestionListRef
+  };
+};
+
+
 interface PostCreatorProps {
-  onPostCreated?: () => void
+  onPostCreated?: () => void;
 }
 
 export function PostCreator({ onPostCreated }: PostCreatorProps) {
-  const [postContent, setPostContent] = useState("")
-  const [tagQuery, setTagQuery] = useState("")
-  const [taggedUsers, setTaggedUsers] = useState<User[]>([])
-  const { results: searchResults, loading: searchLoading, search } = require("@/hooks/use-search-users").useSearchUsers();
-  const [isAnonymous, setIsAnonymous] = useState(false)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [selectedImage, setSelectedImage] = useState<string | null>(null)
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null)
-  const [cropOpen, setCropOpen] = useState(false)
-  const [crop, setCrop] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(1)
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)
-  const [cropAspect, setCropAspect] = useState(16 / 9)
-  const [isLoading, setIsLoading] = useState(false)
-  const [selectedVideo, setSelectedVideo] = useState<string | null>(null)
+  const [postContent, setPostContent] = useState("");
+  // Expose setPostContent globally for mention hook to update state (only in browser)
+  if (typeof window !== "undefined") {
+    (window as any).setPostContent = setPostContent;
+  }
+  // Removed tagQuery, taggedUsers, and search related states as they are replaced by useMentions
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+  const [cropAspect, setCropAspect] = useState(16 / 9);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false); // State for emoji picker
 
-  const { user } = useAuth()
-  const { toast } = useToast()
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // Ref for the main post textarea
+
+  // Integrate useMentions hook
+  const {
+    searchTerm, // Not directly used in JSX, but useful for debugging
+    suggestions,
+    showSuggestions,
+    selectedIndex,
+    handleInputChange: handleMentionsInputChange, // Renamed to avoid conflict
+    handleKeyDown: handleMentionsKeyDown, // Renamed to avoid conflict
+    handleSelectSuggestion,
+    setShowSuggestions: setMentionSuggestionsVisibility,
+    suggestionListRef
+  } = useMentions(textareaRef);
+
 
   // Check if it's Sunday for anonymous posting
-  const isSunday = new Date().getDay() === 0
-
-  // Handle tag search
-  const handleTagSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setTagQuery(value);
-    if (value.length > 1) {
-      await search(value);
-    }
-  };
-
-  // Add user to tagged list
-  const handleAddTag = (user: User) => {
-    if (!taggedUsers.some(u => u._id === user._id)) {
-      setTaggedUsers([...taggedUsers, user]);
-    }
-    setTagQuery("");
-  };
-
-  // Remove user from tagged list
-  const handleRemoveTag = (userId: string) => {
-    setTaggedUsers(taggedUsers.filter(u => u._id !== userId));
-  };
-
-  const handlePost = async () => {
-    if (!postContent.trim()) return;
-    setIsLoading(true);
-    try {
-      await apiClient.createPost({
-        content: postContent.trim(),
-        imageFile: selectedImageFile || undefined,
-        isAnonymous: isSunday ? isAnonymous : false,
-        taggedUserIds: taggedUsers.map(u => u._id),
-      } as any);
-      toast({
-        title: "Post created!",
-        description: "Your post has been shared successfully.",
-      });
-      setPostContent("");
-      setIsAnonymous(false);
-      setSelectedImage(null);
-      setSelectedImageFile(null);
-      setTaggedUsers([]);
-      setTagQuery("");
-      setIsDialogOpen(false);
-      onPostCreated?.();
-    } catch (error) {
-      toast({
-        title: "Failed to create post",
-        description: error instanceof Error ? error.message : "Something went wrong",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const isSunday = new Date().getDay() === 0;
 
   // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -158,23 +272,15 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
 
   // Handle video upload
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+    const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setSelectedVideo(e.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+      // For now, just set the selected video URL for preview if you have one.
+      // Actual video upload logic will depend on your backend/storage solution.
+      setSelectedVideo(URL.createObjectURL(file));
+      // You might also want to set a File object for actual upload later
+      // setSelectedVideoFile(file);
     }
-  }
-
-  // Handle emoji click
-  const handleEmojiClick = () => {
-    toast({
-      title: "Emoji picker coming soon!",
-      description: "We're working on adding emoji support.",
-    })
-  }
+  };
 
   // Callback for when cropping is complete
   const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
@@ -203,8 +309,105 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
     }
   }, [selectedImage, croppedAreaPixels, toast]);
 
+  // Combined content change handler for textarea and mentions
+  const handlePostContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setPostContent(e.target.value);
+    handleMentionsInputChange(e); // Pass the event to the mentions hook
+  };
 
-  // Return JSX from the component
+  // Extract tagged usernames from content
+  const extractTaggedUsernames = (text: string): string[] => {
+    // Regex to find @usernames. It ensures the username part is at least 2 characters long
+    // and consists of alphanumeric characters and underscores.
+    const mentionRegex = /@([a-zA-Z0-9_]{2,})\b/g; // \b ensures whole word match
+    const matches = text.match(mentionRegex);
+    if (!matches) return [];
+    // Extract unique usernames without the '@' symbol
+    return [...new Set(matches.map(match => match.substring(1)))];
+  };
+
+  const handlePost = async () => {
+    if (!postContent.trim() && !selectedImageFile && !selectedVideo) {
+      toast({
+        title: "Content missing",
+        description: "Please write something or attach an image/video to your post.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    let taggedUserIds: string[] = [];
+    const usernamesToLookup = extractTaggedUsernames(postContent);
+
+    if (usernamesToLookup.length > 0) {
+      try {
+        const response = await apiClient.getUsersByUsernames(usernamesToLookup) as { results: UserSearchResult[] };
+        const resolvedUserIds = response.results
+          .filter((u: UserSearchResult) => usernamesToLookup.includes(u.username))
+          .map((u: UserSearchResult) => u._id);
+        taggedUserIds = resolvedUserIds;
+      } catch (error) {
+        console.error("Error looking up tagged users:", error);
+        toast({
+          title: "Mention resolution failed",
+          description: "Some mentioned users could not be found.",
+          variant: "destructive",
+        });
+      }
+    }
+
+    try {
+      await apiClient.createPost({
+        content: postContent.trim(),
+        imageFile: selectedImageFile || undefined,
+        // videoFile: selectedVideo ? new File([], "video.mp4") : undefined, // Remove or implement if video upload is supported
+        isAnonymous: isSunday ? isAnonymous : false,
+        taggedUserIds: taggedUserIds.length > 0 ? taggedUserIds : undefined,
+      } as any); // Type assertion as 'any' might be needed depending on apiClient types
+      toast({
+        title: "Post created!",
+        description: "Your post has been shared successfully.",
+      });
+      setPostContent("");
+      setIsAnonymous(false);
+      setSelectedImage(null);
+      setSelectedImageFile(null);
+      setSelectedVideo(null); // Clear selected video
+      // Removed tag-related state resets as they are now handled by content reset
+      setIsDialogOpen(false);
+      setShowEmojiPicker(false); // Close emoji picker
+      setMentionSuggestionsVisibility(false); // Close mention suggestions
+      onPostCreated?.();
+    } catch (error) {
+      toast({
+        title: "Failed to create post",
+        description: error instanceof Error ? error.message : "Something went wrong",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Close suggestions if clicking outside the textarea/suggestions
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        textareaRef.current &&
+        !textareaRef.current.contains(event.target as Node) &&
+        suggestionListRef.current &&
+        !suggestionListRef.current.contains(event.target as Node)
+      ) {
+        setMentionSuggestionsVisibility(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [setMentionSuggestionsVisibility, textareaRef, suggestionListRef]);
+
+
   return (
     <>
       <Card className="shadow-sm">
@@ -234,37 +437,76 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
                         {user?.username?.slice(0, 2).toUpperCase() || "U"}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0 relative"> {/* Added relative positioning */}
                       <Textarea
+                        ref={textareaRef}
                         placeholder="What's happening on campus?"
                         value={postContent}
-                        onChange={(e) => setPostContent(e.target.value)}
+                        onChange={handlePostContentChange} // Use combined handler
+                        onKeyDown={handleMentionsKeyDown} // Use mentions keydown handler
                         className="min-h-[120px] border-none resize-none focus-visible:ring-0 p-0 text-base"
                         disabled={isLoading}
                       />
+                      {showSuggestions && suggestions.length > 0 && (
+                        <div
+                          ref={suggestionListRef}
+                          className="absolute z-50 bg-popover border rounded-md shadow-lg py-1 w-full max-h-48 overflow-y-auto mt-1"
+                          // Position it right below the textarea
+                          style={{
+                            top: textareaRef.current ? `${textareaRef.current.offsetHeight + textareaRef.current.offsetTop + 5}px` : 'auto',
+                            left: textareaRef.current ? `${textareaRef.current.offsetLeft}px` : 'auto',
+                            width: textareaRef.current ? `${textareaRef.current.offsetWidth}px` : 'auto',
+                          }}
+                        >
+                          {suggestions.map((user, index) => (
+                            <div
+                              key={user._id}
+                              className={`flex items-center space-x-2 p-2 cursor-pointer hover:bg-accent ${
+                                index === selectedIndex ? 'bg-accent text-accent-foreground' : ''
+                              }`}
+                              onClick={() => handleSelectSuggestion(user.username)}
+                            >
+                              <Avatar className="w-6 h-6">
+                                <AvatarImage src={user.profilePic || "/placeholder.svg"} />
+                                <AvatarFallback className="text-xs">{user.username.slice(0, 2).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                              <span>@{user.username}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {selectedImage && (
-                    <div className="relative">
-                      <img
-                        src={selectedImage || "/placeholder.svg"}
-                        alt="Selected"
-                        className="w-full h-48 object-cover rounded-lg"
-                      />
+                  {(selectedImage || selectedVideo) && (
+                    <div className="relative ml-14 mt-4"> {/* Adjusted margin to align with avatar */}
+                      {selectedImage && (
+                        <img
+                          src={selectedImage}
+                          alt="Selected"
+                          className="w-full h-48 object-cover rounded-lg"
+                        />
+                      )}
+                      {selectedVideo && (
+                        <video
+                          src={selectedVideo}
+                          controls
+                          className="w-full h-48 object-cover rounded-lg"
+                        />
+                      )}
                       <Button
-                        variant="secondary"
+                        variant="destructive"
                         size="sm"
-                        onClick={() => { setSelectedImage(null); setSelectedImageFile(null); }}
-                        className="absolute top-2 right-2"
+                        onClick={() => { setSelectedImage(null); setSelectedImageFile(null); setSelectedVideo(null); }}
+                        className="absolute top-2 right-2 rounded-full h-8 w-8 p-0" // Adjusted size
                         disabled={isLoading}
                       >
-                        Remove
+                        <Trash2 className="w-4 h-4" /> {/* Use Trash2 icon */}
                       </Button>
                     </div>
                   )}
 
-                  {/* Cropping Modal */}
+                  {/* Cropping Modal - remains unchanged, just its trigger flow changes */}
                   {cropOpen && selectedImage && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
                       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
@@ -321,8 +563,8 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
                     </div>
                   )}
 
-                  {/* Tagging UI */}
-                  <div className="flex gap-2 flex-wrap mb-2">
+                  {/* Removed Tagging UI */}
+                  {/* <div className="flex gap-2 flex-wrap mb-2">
                     {taggedUsers.map(u => (
                       <span key={u._id} className="bg-muted px-2 py-1 rounded flex items-center gap-1">
                         @{u.username}
@@ -351,9 +593,9 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
                           ))
                       )}
                     </div>
-                  )}
+                  )} */}
 
-                  <div className="flex items-center justify-between pt-4 border-t">
+                  <div className="flex items-center justify-between pt-4 border-t relative"> {/* Added relative for emoji picker */}
                     <div className="flex space-x-1">
                       <Button
                         variant="ghost"
@@ -396,14 +638,26 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
                         size="sm"
                         className="text-primary hover:bg-primary/10"
                         disabled={isLoading}
-                        onClick={handleEmojiClick}
+                        onClick={() => setShowEmojiPicker(!showEmojiPicker)} // Toggle emoji picker
                       >
                         <Smile className="w-5 h-5" />
                       </Button>
+                      {showEmojiPicker && (
+                        <div className="absolute z-50 bottom-12 left-0"> {/* Positioned relative to the parent div */}
+                          <Picker
+                            data={data}
+                            onEmojiSelect={(e: any) => {
+                              setPostContent(prev => prev + (e.native || e.shortcodes || ""));
+                              setShowEmojiPicker(false); // Close after selecting emoji
+                            }}
+                            theme="auto"
+                          />
+                        </div>
+                      )}
                     </div>
                     <Button
                       onClick={handlePost}
-                      disabled={!postContent.trim() || isLoading}
+                      disabled={(!postContent.trim() && !selectedImageFile && !selectedVideo) || isLoading}
                       className="bg-primary hover:bg-primary/90 text-white rounded-full px-6 font-medium"
                     >
                       {isLoading ? (

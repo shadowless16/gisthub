@@ -5,6 +5,7 @@ export interface Post {
   userId: ObjectId
   content: string
   imageURL?: string
+  videoURL?: string
   isAnonymous: boolean
   likes: ObjectId[]
   createdAt: Date
@@ -16,6 +17,7 @@ export interface PostResponse {
   userId: string
   content: string
   imageURL?: string
+  videoURL?: string
   isAnonymous: boolean
   likes: string[]
   likesCount: number
@@ -24,6 +26,7 @@ export interface PostResponse {
     username: string
     profilePic?: string
   }
+  taggedUserIds?: string[]
 }
 
 export function sanitizePost(post: Post, user?: { username: string; profilePic?: string }): PostResponse {
@@ -32,10 +35,12 @@ export function sanitizePost(post: Post, user?: { username: string; profilePic?:
     userId: post.userId.toString(),
     content: post.content,
     imageURL: post.imageURL,
+    videoURL: post.videoURL,
     isAnonymous: post.isAnonymous,
     likes: post.likes.map((id) => id.toString()),
     likesCount: post.likes.length,
     createdAt: post.createdAt.toISOString(),
     user: post.isAnonymous ? undefined : user,
+    taggedUserIds: post.taggedUserIds ? post.taggedUserIds.map((id) => id.toString()) : undefined,
   }
 }

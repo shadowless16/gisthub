@@ -3,6 +3,7 @@
 import { Home, User, Bell, MessageCircle, Users, Calendar, Settings, Trophy } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 import {
   Sidebar,
   SidebarContent,
@@ -66,7 +67,26 @@ const menuItems = [
 ]
 
 export function AppSidebar() {
-  const pathname = usePathname()
+  const pathname = usePathname();
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  useEffect(() => {
+    async function fetchUnreadCount() {
+      try {
+        const res = await fetch("/api/notifications/unread-count");
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(data.count || 0);
+        }
+      } catch (e) {
+        setUnreadCount(0);
+      }
+    }
+    fetchUnreadCount();
+    // Optionally, poll every 30s for updates
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <Sidebar className="border-r bg-card/50 sidebar-spacing">
@@ -84,10 +104,15 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild isActive={pathname === item.url}>
                     <Link
                       href={item.url}
-                      className="flex items-center space-x-4 px-4 py-3 rounded-xl hover:bg-accent/50 transition-colors"
+                      className="flex items-center space-x-4 px-4 py-3 rounded-xl hover:bg-accent/50 transition-colors relative"
                     >
                       <item.icon className={`w-6 h-6 ${item.iconClass}`} />
                       <span className="font-medium">{item.title}</span>
+                      {item.title === "Notifications" && unreadCount > 0 && (
+                        <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[1.5em]">
+                          {unreadCount}
+                        </span>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -97,5 +122,5 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
-  )
+  );
 }

@@ -15,10 +15,22 @@ export async function GET(request: NextRequest) {
     // Get search query from URL
     const { searchParams } = new URL(request.url)
     const q = searchParams.get("q")?.trim()
-    if (!q || q.length < 2) {
-      return NextResponse.json({ users: [] })
+    const usernamesParam = searchParams.get("usernames")
+
+    if (usernamesParam) {
+      // Bulk lookup by usernames (for tagging extraction)
+      const usernames = usernamesParam.split(",").map(u => u.trim()).filter(Boolean)
+      if (usernames.length === 0) {
+        return NextResponse.json({ results: [] })
+      }
+      // Added case-insensitive search for usernames
+      const users = await usersCollection.find({ username: { $in: usernames.map(u => new RegExp(`^${u}$`, 'i')) } }).toArray()
+      return NextResponse.json({ results: users.map(sanitizeUser) })
     }
 
+    if (!q || q.length < 2) {
+      return NextResponse.json({ results: [] })
+    }
 
     // Case-insensitive search by username, firstName, or lastName
     const users = await usersCollection
@@ -32,7 +44,7 @@ export async function GET(request: NextRequest) {
       .limit(10)
       .toArray()
 
-    return NextResponse.json({ users: users.map(sanitizeUser) })
+    return NextResponse.json({ results: users.map(sanitizeUser) })
   } catch (error) {
     console.error("User search error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
