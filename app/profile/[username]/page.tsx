@@ -74,7 +74,7 @@ export default function UserProfilePage() {
       user._id !== authId
     );
   }
-  
+    
   return (
     <MainLayout>
       <main className="w-full max-w-2xl mx-auto px-2 py-3 sm:px-4 sm:py-6 lg:py-10 bg-white dark:bg-[#0a0d18] min-h-screen"> {/* Improved mobile padding and background */}

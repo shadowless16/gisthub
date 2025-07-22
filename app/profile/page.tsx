@@ -207,6 +207,25 @@ export default function Profile() {
     fetchUserPosts(false, 0);
   }, [user?._id, fetchUserPosts]);
 
+  // Effect to fetch and populate the user's profile data from the backend when the component loads
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      if (!user?._id) return;
+
+      try {
+        const profileData = await apiClient.getUser(user._id);
+        if (profileData) {
+          // Update user state or other relevant states with fetched data
+          refreshUser();
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile data:', error);
+      }
+    };
+
+    fetchProfileData();
+  }, [user?._id, refreshUser]);
+
   // Function to load more posts for infinite scrolling
   const loadMorePosts = () => {
     const newSkip = skipPosts + postsLimit;
@@ -474,6 +493,14 @@ export default function Profile() {
                     </div>
                   </div>
                 )}
+
+                {/* Edit Profile Button */}
+                <Button
+                  onClick={() => window.location.href = '/auth/setup-profile'}
+                  className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  Edit Profile
+                </Button>
               </CardContent>
             </Card>
 

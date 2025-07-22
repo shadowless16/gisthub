@@ -1,3 +1,4 @@
+// components/feed/post-creator.tsx
 "use client"
 
 import type React from "react"
@@ -197,6 +198,9 @@ const useMentions = (textareaRef: React.RefObject<HTMLTextAreaElement>) => {
     setSuggestions([]);
   }, [searchTerm, mentionStartIndex, textareaRef]);
 
+  // Add this alias to avoid the "Cannot find name" error
+  const setMentionSuggestionsVisibility = setShowSuggestions;
+
   return {
     searchTerm,
     suggestions,
@@ -205,17 +209,17 @@ const useMentions = (textareaRef: React.RefObject<HTMLTextAreaElement>) => {
     handleInputChange,
     handleKeyDown,
     handleSelectSuggestion,
-    setShowSuggestions,
+    setShowSuggestions: setMentionSuggestionsVisibility, // Changed name to avoid conflict
     suggestionListRef
   };
 };
 
 
-interface PostCreatorProps {
-  onPostCreated?: () => void;
+export interface PostCreatorProps {
+  onSubmit: (content: string, imageFile?: File, taggedUserIds?: string[]) => Promise<void>;
 }
 
-export function PostCreator({ onPostCreated }: PostCreatorProps) {
+export function PostCreator({ onSubmit }: PostCreatorProps) {
   const [postContent, setPostContent] = useState("");
   // Expose setPostContent globally for mention hook to update state (only in browser)
   if (typeof window !== "undefined") {
@@ -360,7 +364,7 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
     try {
       await apiClient.createPost({
         content: postContent.trim(),
-        imageFile: selectedImageFile || undefined,
+        imageFile: selectedImageFile === null ? undefined : selectedImageFile, // Fixed: Explicitly convert null to undefined
         // videoFile: selectedVideo ? new File([], "video.mp4") : undefined, // Remove or implement if video upload is supported
         isAnonymous: isSunday ? isAnonymous : false,
         taggedUserIds: taggedUserIds.length > 0 ? taggedUserIds : undefined,
@@ -378,7 +382,7 @@ export function PostCreator({ onPostCreated }: PostCreatorProps) {
       setIsDialogOpen(false);
       setShowEmojiPicker(false); // Close emoji picker
       setMentionSuggestionsVisibility(false); // Close mention suggestions
-      onPostCreated?.();
+      onSubmit(postContent.trim(), selectedImageFile || undefined, taggedUserIds); // Pass undefined if selectedImageFile is null
     } catch (error) {
       toast({
         title: "Failed to create post",

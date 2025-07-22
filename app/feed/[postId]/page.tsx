@@ -1,41 +1,16 @@
+// app/feed/[postId]/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
 import { useQuery } from '@tanstack/react-query';
 import { MainLayout } from "@/components/layout/main-layout"
-import { PostCard } from "@/components/feed/post-card"
+import { PostCard } from "@/components/feed/post-card" // Corrected import path
 import { apiClient } from "@/lib/api-client"
-import { Loader2 } from "lucide-react"
 import { Skeleton } from '@/components/ui/skeleton';
 import { useParams } from 'next/navigation';
 
-interface Post {
-  _id: string;
-  userId: string;
-  content: string;
-  imageURL?: string;
-  isAnonymous: boolean;
-  likes: string[];
-  likesCount: number;
-  createdAt: string;
-  user?: {
-    username: string;
-    profilePic?: string;
-  };
-  taggedUserIds?: string[];
-}
-
-interface CommentType {
-  _id: string;
-  user?: {
-    username: string;
-    profilePic?: string;
-  };
-  content: string;
-  createdAt: string;
-  imageURL?: string;
-  replies?: CommentType[];
-}
+// Import types from their dedicated files
+import type { Post } from "@/types/posts"; // Corrected import path
+import type { CommentType } from "@/types/comment"; // Corrected import path
 
 export default function SinglePostPage() {
   const params = useParams();
@@ -68,12 +43,10 @@ export default function SinglePostPage() {
       const response = await apiClient.getComments(postId, { limit: 10, skip: 0 }) as { comments: CommentType[] };
       return response.comments;
     },
-    enabled: !!postId && !!postData, // Only fetch comments if postData is available
+    enabled: !!postId && !!postData,
   });
 
-  // Debug log to check if imageURL is present in comments
   if (typeof window !== 'undefined') {
-    // Only log in the browser
     console.log('commentsData:', commentsData);
   }
 
@@ -84,23 +57,18 @@ export default function SinglePostPage() {
 
   const handleCommentAdded = () => {
     refetchComments();
-    refetchPost(); // Refetch post to update comment count if it's part of post data
+    refetchPost();
   };
 
   const handleDeletePost = async (id: string) => {
     await apiClient.deletePost(id);
-    // Redirect or show a message after deletion
-    // For now, simply refetching to show it's gone from the "single" view if not redirected
-    refetchPost();
-    // Potentially redirect to feed page after deletion
-    window.location.href = '/feed';
+    // Optionally, you can set a state here to show a message or trigger a refetch, or let the page show a not found/empty state.
   };
-
 
   if (isPostLoading) {
     return (
       <MainLayout>
-        <div className="max-w-4xl mx-auto py-8"> {/* Changed max-w-2xl to max-w-4xl */}
+        <div className="max-w-4xl mx-auto py-8">
           <Skeleton className="h-60 w-full" />
         </div>
       </MainLayout>
@@ -132,7 +100,7 @@ export default function SinglePostPage() {
 
   return (
     <MainLayout>
-      <div className="max-w-4xl mx-auto space-y-6 py-6"> {/* Changed max-w-2xl to max-w-4xl */}
+      <div className="max-w-4xl mx-auto space-y-6 py-6">
         <PostCard
           post={postData}
           comments={commentsData || []}
@@ -140,8 +108,9 @@ export default function SinglePostPage() {
           onUpdate={handlePostUpdate}
           onDelete={handleDeletePost}
           onCommentAdded={handleCommentAdded}
-          openCommentsByDefault={true} // Auto-open comments section
-          disableDetailNavigation={true} // Disable further navigation from within this PostCard
+          openCommentsByDefault={true}
+          disableDetailNavigation={true}
+          // The onPostCreated prop is removed as PostCard should not create posts directly.
         />
       </div>
     </MainLayout>

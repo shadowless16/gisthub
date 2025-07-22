@@ -68,7 +68,9 @@ export async function POST(request: NextRequest) {
     let createdUser = await usersCollection.findOne({ _id: result.insertedId })
 
     if (!createdUser) {
-      return NextResponse.json({ error: "Failed to create user" }, { status: 500 })
+      // This is a critical error: user was inserted but cannot be found immediately after.
+      console.error("Registration error: User inserted but could not be found immediately.")
+      return NextResponse.json({ error: "Failed to create user: Retrieval issue." }, { status: 500 })
     }
 
     // Auto-follow AkD
@@ -78,15 +80,28 @@ export async function POST(request: NextRequest) {
       await usersCollection.updateOne({ _id: createdUser._id }, { $addToSet: { following: adminUser._id } })
       // Add new user to AkD's followers
       await usersCollection.updateOne({ _id: adminUser._id }, { $addToSet: { followers: createdUser._id } })
-      // Refresh createdUser
-      createdUser = await usersCollection.findOne({ _id: result.insertedId })
+      
+      // Refresh createdUser to get updated 'following'/'followers' arrays
+      // It's crucial to get the updated user to ensure correct data for JWT and response
+      const refreshedUser = await usersCollection.findOne({ _id: result.insertedId })
+      if (!refreshedUser) {
+        console.error("Registration error: User found, but failed to retrieve updated user after auto-follow.")
+        return NextResponse.json({ error: "Failed to create user: Post-registration update issue." }, { status: 500 })
+      }
+      createdUser = refreshedUser; // Update createdUser with the refreshed data
     }
 
-    // Generate JWT token
+    // FINAL CHECK: Ensure createdUser and its _id are valid before generating token
+    if (!createdUser || !createdUser._id) {
+        console.error("Critical registration error: createdUser or its _id is missing before token generation.");
+        return NextResponse.json({ error: "Internal server error: User data incomplete for token generation." }, { status: 500 });
+    }
+
+    // Generate JWT token - now assured that createdUser._id is valid
     const token = generateToken({
-      userId: createdUser?._id?.toString() || "",
-      username: createdUser?.username || "",
-      email: createdUser?.email || "",
+      userId: createdUser._id.toString(), // Removed || "" fallback
+      username: createdUser.username,
+      email: createdUser.email,
     })
 
     // Create response with cookie

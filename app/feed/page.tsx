@@ -1,38 +1,25 @@
+// app/feed/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { MainLayout } from "@/components/layout/main-layout"
 import { StoriesSection } from "@/components/feed/stories-section"
-import { PostCreator } from "@/components/feed/post-creator"
-import { PostCard } from "@/components/feed/post-card"
+import { PostCreator } from "@/components/feed/post-creator" // Import PostCreator from its dedicated file
+import { PostCard } from "@/components/feed/post-card"     // Import PostCard from its dedicated file
 import { apiClient } from "@/lib/api-client"
 import { Loader2 } from "lucide-react"
 import { Skeleton } from '@/components/ui/skeleton';
 
-interface Post {
-  _id: string
-  userId: string
-  content: string
-  imageURL?: string
-  isAnonymous: boolean
-  likes: string[]
-  likesCount: number
-  createdAt: string
-  user?: {
-    username: string
-    profilePic?: string
-  }
-}
-
+// Import types from their dedicated files
+import type { Post } from "@/types/posts";
+import type { CommentType } from "@/types/comment";
 
 interface CommentsByPost {
-  [postId: string]: any[];
+  [postId: string]: CommentType[];
 }
 
 export default function FeedPage() {
   const limit = 20;
-
 
   const {
     data,
@@ -46,7 +33,7 @@ export default function FeedPage() {
     queryKey: ['posts'],
     queryFn: async ({ pageParam = 0 }) => {
       const response = await apiClient.getPosts({ includeAnonymous: true, limit, skip: pageParam }) as any;
-      let commentsByPost = {};
+      let commentsByPost: CommentsByPost = {};
       if (response.posts.length > 0) {
         const postIds = response.posts.map((p: Post) => p._id).join(",");
         const commentsResp = await apiClient.getCommentsBatch(postIds) as { commentsByPost: CommentsByPost };
@@ -66,8 +53,22 @@ export default function FeedPage() {
   const posts = data?.pages.flatMap(page => page.posts) || [];
   const commentsByPost: CommentsByPost = data?.pages.reduce((acc, page) => ({ ...acc, ...page.commentsByPost }), {}) || {};
 
-  const handlePostCreated = () => {
-    refetch();
+  // For PostCreator, we need a function to handle submission (creating a new post)
+  // This logic should be here, not within PostCreator itself, or PostCreator should handle it internally
+  // and just notify this page of a successful creation to refetch.
+  const handlePostCreationSubmit = async (content: string, imageFile?: File, taggedUserIds?: string[]) => {
+    try {
+      await apiClient.createPost({
+        content,
+        imageFile,
+        isAnonymous: false, // Assuming posts from PostCreator are not anonymous by default
+        taggedUserIds: taggedUserIds,
+      });
+      refetch(); // Refetch posts to show the new one
+    } catch (error) {
+      console.error("Failed to create post:", error);
+      // You might want to add a toast message here
+    }
   };
 
   const handlePostUpdate = (postId: string, updates: Partial<Post>) => {
@@ -79,13 +80,13 @@ export default function FeedPage() {
     refetch();
   };
 
-
   if (isLoading && posts.length === 0) {
     return (
       <MainLayout>
         <div className="max-w-2xl mx-auto space-y-6">
           <StoriesSection />
-          <PostCreator onPostCreated={handlePostCreated} />
+          {/* Use the new PostCreator component and pass the submit handler */}
+          <PostCreator onSubmit={handlePostCreationSubmit} />
           <div className="space-y-6">
             {[...Array(5)].map((_, i) => (
               <Skeleton key={i} className="h-40 w-full" />
@@ -113,7 +114,8 @@ export default function FeedPage() {
     <MainLayout>
       <div className="max-w-2xl mx-auto space-y-6">
         <StoriesSection />
-        <PostCreator onPostCreated={handlePostCreated} />
+        {/* Use the new PostCreator component and pass the submit handler */}
+        <PostCreator onSubmit={handlePostCreationSubmit} />
         <div className="space-y-6">
           {posts.length === 0 ? (
             <div className="text-center py-12">

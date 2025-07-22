@@ -51,3 +51,32 @@ export async function GET(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const start = Date.now();
+  try {
+    const { id } = params;
+    if (!id) {
+      return NextResponse.json({ error: "Post ID is required" }, { status: 400 });
+    }
+
+    const { db } = await connectToDatabase();
+    const postsCollection = db.collection("posts");
+    const deleteResult = await postsCollection.deleteOne({ _id: new ObjectId(id) });
+
+    if (deleteResult.deletedCount === 0) {
+      return NextResponse.json({ error: "Post not found or already deleted" }, { status: 404 });
+    }
+
+    const duration = Date.now() - start;
+    console.log(`[API LOG] /api/posts/${id} DELETE took ${duration}ms`);
+    return NextResponse.json({ success: true, message: "Post deleted" });
+  } catch (error) {
+    const duration = Date.now() - start;
+    console.error(`[API ERROR] /api/posts/[id] DELETE failed after ${duration}ms:`, error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
